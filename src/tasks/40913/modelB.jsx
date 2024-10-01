@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+//Card footer imported by trainer
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
 const statuses = ['backlog', 'doing', 'review', 'done'];
