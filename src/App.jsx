@@ -1,332 +1,395 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
+  CardDescription,
 } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Slider } from '@/components/ui/slider';
+  Button,
+} from '@/components/ui/button';
+import {
+  Input,
+} from '@/components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 
-function App() {
-  const [baseColor, setBaseColor] = useState('#3490dc');
-  const [harmonyRule, setHarmonyRule] = useState('Complementary');
-  const [hue, setHue] = useState(0);
-  const [saturation, setSaturation] = useState(0);
-  const [brightness, setBrightness] = useState(0);
-  const [generatedPalette, setGeneratedPalette] = useState([]);
-  const [copiedColor, setCopiedColor] = useState(null);
+const CustomCheckbox = ({ checked, onChange, label, color }) => (
+  <label className="flex items-center space-x-2 cursor-pointer">
+    <input
+      type="checkbox"
+      checked={checked}
+      onChange={onChange}
+      className="hidden"
+    />
+    <div 
+      className={`w-5 h-5 border-2 rounded flex items-center justify-center ${
+        checked ? 'bg-opacity-100' : 'bg-opacity-0'
+      }`}
+      style={{ backgroundColor: checked ? color : 'transparent', borderColor: color }}
+    >
+      {checked && <span className="text-white text-xs">✓</span>}
+    </div>
+    <span>{label}</span>
+  </label>
+);
+
+const App = () => {
+  const [habits, setHabits] = useState([]);
+  const [trackingData, setTrackingData] = useState({});
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [currentHabit, setCurrentHabit] = useState(null);
+  const [newHabit, setNewHabit] = useState({ name: '', color: '#a855f7' });
+
+  const currentDate = new Date();
+  const currentMonth = currentDate.getMonth();
+  const currentYear = currentDate.getFullYear();
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
 
   useEffect(() => {
-    generatePalette();
-  }, [baseColor, harmonyRule, hue, saturation, brightness]);
-
-  useEffect(() => {
-    if (copiedColor) {
-      const timer = setTimeout(() => {
-        setCopiedColor(null);
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [copiedColor]);
-
-  const generatePalette = () => {
-    const baseHSL = hexToHSL(baseColor);
-    let colors = [];
-
-    switch (harmonyRule) {
-      case 'Complementary':
-        colors = getComplementary(baseHSL);
-        break;
-      case 'Analogous':
-        colors = getAnalogous(baseHSL);
-        break;
-      case 'Triadic':
-        colors = getTriadic(baseHSL);
-        break;
-      case 'Tetradic':
-        colors = getTetradic(baseHSL);
-        break;
-      case 'Monochromatic':
-        colors = getMonochromatic(baseHSL);
-        break;
-      case 'Split-complementary':
-        colors = getSplitComplementary(baseHSL);
-        break;
-      default:
-        colors = [baseColor];
-    }
-
-    // Apply adjustments
-    const adjustedColors = colors.map((color) => {
-      const hsl = hexToHSL(color);
-      hsl.h = (hsl.h + hue + 360) % 360;
-      hsl.s = clamp(hsl.s + saturation, 0, 100);
-      hsl.l = clamp(hsl.l + brightness, 0, 100);
-      return HSLToHex(hsl);
+    setTrackingData((prevData) => {
+      const initialData = { ...prevData };
+      for (let day = 1; day <= daysInMonth; day++) {
+        if (!initialData[day]) {
+          initialData[day] = {};
+        }
+        habits.forEach((habit) => {
+          if (!(habit.id in initialData[day])) {
+            initialData[day][habit.id] = false;
+          }
+        });
+      }
+      return initialData;
     });
+  }, [habits, daysInMonth]);
 
-    setGeneratedPalette(adjustedColors);
+  const toggleHabit = useCallback((dayIndex, habitId) => {
+    setTrackingData((prevData) => {
+      const newData = { ...prevData };
+      if (!newData[dayIndex]) {
+        newData[dayIndex] = {};
+      }
+      newData[dayIndex] = {
+        ...newData[dayIndex],
+        [habitId]: !newData[dayIndex][habitId]
+      };
+      return newData;
+    });
+  }, []);
+
+  const addHabit = () => {
+    if (newHabit.name.trim() === '') return;
+    const id = Date.now().toString();
+    setHabits([...habits, { ...newHabit, id }]);
+    setNewHabit({ name: '', color: '#a855f7' });
+    setIsDialogOpen(false);
   };
 
-  // Color Harmony Functions
-  const getComplementary = (hsl) => {
-    const complementaryHue = (hsl.h + 180) % 360;
-    return [
-      HSLToHex(hsl),
-      HSLToHex({ ...hsl, h: complementaryHue }),
-    ];
+  const updateHabit = () => {
+    if (newHabit.name.trim() === '') return;
+    setHabits((prevHabits) =>
+      prevHabits.map((habit) =>
+        habit.id === currentHabit.id ? { ...habit, ...newHabit } : habit
+      )
+    );
+    setNewHabit({ name: '', color: '#a855f7' });
+    setIsEditDialogOpen(false);
+    setCurrentHabit(null);
   };
 
-  const getAnalogous = (hsl) => {
-    const angle = 30;
-    return [
-      HSLToHex({ ...hsl, h: (hsl.h - angle + 360) % 360 }),
-      HSLToHex(hsl),
-      HSLToHex({ ...hsl, h: (hsl.h + angle) % 360 }),
-    ];
-  };
-
-  const getTriadic = (hsl) => {
-    return [
-      HSLToHex(hsl),
-      HSLToHex({ ...hsl, h: (hsl.h + 120) % 360 }),
-      HSLToHex({ ...hsl, h: (hsl.h + 240) % 360 }),
-    ];
-  };
-
-  const getTetradic = (hsl) => {
-    return [
-      HSLToHex(hsl),
-      HSLToHex({ ...hsl, h: (hsl.h + 90) % 360 }),
-      HSLToHex({ ...hsl, h: (hsl.h + 180) % 360 }),
-      HSLToHex({ ...hsl, h: (hsl.h + 270) % 360 }),
-    ];
-  };
-
-  const getMonochromatic = (hsl) => {
-    return [
-      HSLToHex({ ...hsl, l: clamp(hsl.l - 30, 0, 100) }),
-      HSLToHex({ ...hsl, l: clamp(hsl.l - 15, 0, 100) }),
-      HSLToHex(hsl),
-      HSLToHex({ ...hsl, l: clamp(hsl.l + 15, 0, 100) }),
-      HSLToHex({ ...hsl, l: clamp(hsl.l + 30, 0, 100) }),
-    ];
-  };
-
-  const getSplitComplementary = (hsl) => {
-    return [
-      HSLToHex(hsl),
-      HSLToHex({ ...hsl, h: (hsl.h + 150) % 360 }),
-      HSLToHex({ ...hsl, h: (hsl.h + 210) % 360 }),
-    ];
-  };
-
-  // Utility function to clamp values
-  const clamp = (value, min, max) => {
-    return Math.min(max, Math.max(min, value));
-  };
-
-  // Color Conversion Functions
-  const hexToHSL = (H) => {
-    let r = 0, g = 0, b = 0;
-    if (H.length === 4) {
-      r = parseInt(H[1] + H[1], 16);
-      g = parseInt(H[2] + H[2], 16);
-      b = parseInt(H[3] + H[3], 16);
-    } else if (H.length === 7) {
-      r = parseInt(H[1] + H[2], 16);
-      g = parseInt(H[3] + H[4], 16);
-      b = parseInt(H[5] + H[6], 16);
-    }
-    r /= 255;
-    g /= 255;
-    b /= 255;
-    const cmin = Math.min(r, g, b);
-    const cmax = Math.max(r, g, b);
-    const delta = cmax - cmin;
-    let h = 0, s = 0, l = 0;
-
-    if (delta === 0) h = 0;
-    else if (cmax === r) h = ((g - b) / delta) % 6;
-    else if (cmax === g) h = (b - r) / delta + 2;
-    else h = (r - g) / delta + 4;
-
-    h = Math.round(h * 60);
-    if (h < 0) h += 360;
-
-    l = (cmax + cmin) / 2;
-    s = delta === 0 ? 0 : delta / (1 - Math.abs(2 * l - 1));
-    s = +(s * 100).toFixed(1);
-    l = +(l * 100).toFixed(1);
-
-    return { h, s, l };
-  };
-
-  const HSLToHex = ({ h, s, l }) => {
-    s /= 100;
-    l /= 100;
-    const c = (1 - Math.abs(2 * l - 1)) * s;
-    const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
-    const m = l - c / 2;
-    let r = 0, g = 0, b = 0;
-
-    if (0 <= h && h < 60) {
-      r = c; g = x; b = 0;
-    } else if (60 <= h && h < 120) {
-      r = x; g = c; b = 0;
-    } else if (120 <= h && h < 180) {
-      r = 0; g = c; b = x;
-    } else if (180 <= h && h < 240) {
-      r = 0; g = x; b = c;
-    } else if (240 <= h && h < 300) {
-      r = x; g = 0; b = c;
-    } else if (300 <= h && h < 360) {
-      r = c; g = 0; b = x;
-    }
-
-    r = Math.round((r + m) * 255).toString(16).padStart(2, '0');
-    g = Math.round((g + m) * 255).toString(16).padStart(2, '0');
-    b = Math.round((b + m) * 255).toString(16).padStart(2, '0');
-
-    return `#${r}${g}${b}`;
-  };
-
-  const handleColorInputChange = (e) => {
-    setBaseColor(e.target.value);
-  };
-
-  const copyToClipboard = (color) => {
-    navigator.clipboard.writeText(color).then(() => {
-      setCopiedColor(color);
+  const removeHabit = (habitId) => {
+    setHabits((prevHabits) => prevHabits.filter((habit) => habit.id !== habitId));
+    setTrackingData((prevData) => {
+      const newData = { ...prevData };
+      Object.keys(newData).forEach((day) => {
+        delete newData[day][habitId];
+      });
+      return newData;
     });
   };
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-100 to-gray-200 p-4 sm:p-8">
-      <Card className="max-w-4xl mx-auto shadow-lg">
-        <CardHeader className="bg-gradient-to-r from-blue-500 to-purple-600 text-white">
-          <CardTitle className="text-2xl font-bold">Color Scheme Generator</CardTitle>
-          <p className="text-sm opacity-80">
-            Create harmonious color palettes for your designs with ease.
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-6 p-6">
-          {/* Base Color Selection */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4">
-            <label className="w-full sm:w-1/3 font-medium text-gray-700">Base Color:</label>
-            <div className="flex-1 flex items-center space-x-2">
-              <input
-                type="color"
-                value={baseColor}
-                onChange={(e) => setBaseColor(e.target.value)}
-                className="w-16 h-10 rounded cursor-pointer"
-              />
-              <Input
-                type="text"
-                value={baseColor}
-                onChange={handleColorInputChange}
-                placeholder="#3490dc"
-                className="flex-1"
-              />
-            </div>
-          </div>
+  const calculateStreak = (habitId) => {
+    let streak = 0;
+    for (let day = daysInMonth; day >= 1; day--) {
+      if (trackingData[day]?.[habitId]) {
+        streak += 1;
+      } else {
+        break;
+      }
+    }
+    return streak;
+  };
 
-          {/* Harmony Selector */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4">
-            <label className="w-full sm:w-1/3 font-medium text-gray-700">Color Harmony:</label>
-            <Select
-              value={harmonyRule}
-              onValueChange={(value) => setHarmonyRule(value)}
-              className="w-full sm:w-2/3"
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select harmony" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Complementary">Complementary (2 colors)</SelectItem>
-                <SelectItem value="Analogous">Analogous (3 colors)</SelectItem>
-                <SelectItem value="Triadic">Triadic (3 colors)</SelectItem>
-                <SelectItem value="Tetradic">Tetradic (4 colors)</SelectItem>
-                <SelectItem value="Monochromatic">Monochromatic (5 colors)</SelectItem>
-                <SelectItem value="Split-complementary">
-                  Split-complementary (3 colors)
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Adjustments */}
-          <div className="space-y-4">
-            <div>
-              <label className="block mb-1 font-medium text-gray-700">Hue Adjustment:</label>
-              <Slider
-                value={[hue]}
-                onValueChange={(val) => setHue(val[0])}
-                max={360}
-                step={1}
-                className="my-2"
+  const renderWheel = () => {
+    const baseRadius = 150;
+    const center = 200;
+    const segmentAngle = 360 / daysInMonth;
+  
+    return (
+      <svg width={400} height={400} className="mx-auto">
+        {Array.from({ length: daysInMonth }).map((_, dayIndex) => {
+          const dayNumber = dayIndex + 1;
+          const startAngle = segmentAngle * dayIndex - 90;
+          const endAngle = startAngle + segmentAngle;
+  
+          const dayHabits = trackingData[dayNumber] || {};
+          const completedHabits = Object.entries(dayHabits).filter(([_, completed]) => completed);
+  
+          let slices;
+          if (completedHabits.length === 0) {
+            slices = [(
+              <path
+                key={`slice-${dayIndex}`}
+                d={`M${center},${center} L${center + baseRadius * Math.cos((startAngle * Math.PI) / 180)},${center + baseRadius * Math.sin((startAngle * Math.PI) / 180)} A${baseRadius},${baseRadius} 0 0,1 ${center + baseRadius * Math.cos((endAngle * Math.PI) / 180)},${center + baseRadius * Math.sin((endAngle * Math.PI) / 180)} Z`}
+                fill="#e5e7eb"
+                stroke="#ffffff"
+                strokeWidth="1"
+                className="cursor-pointer hover:opacity-80 transition-opacity"
               />
-              <span className="text-sm text-gray-600">{hue}°</span>
-            </div>
-            <div>
-              <label className="block mb-1 font-medium text-gray-700">Saturation Adjustment:</label>
-              <Slider
-                value={[saturation]}
-                onValueChange={(val) => setSaturation(val[0])}
-                min={-100}
-                max={100}
-                step={1}
-                className="my-2"
-              />
-              <span className="text-sm text-gray-600">{saturation}%</span>
-            </div>
-            <div>
-              <label className="block mb-1 font-medium text-gray-700">Brightness Adjustment:</label>
-              <Slider
-                value={[brightness]}
-                onValueChange={(val) => setBrightness(val[0])}
-                min={-100}
-                max={100}
-                step={1}
-                className="my-2"
-              />
-              <span className="text-sm text-gray-600">{brightness}%</span>
-            </div>
-          </div>
-
-          {/* Generated Palette */}
-          <div>
-            <label className="block mb-2 font-medium text-gray-700">Generated Palette:</label>
-            <div className="flex flex-wrap gap-4">
-              {generatedPalette.map((color, index) => (
-                <div
-                  key={index}
-                  className="w-24 h-24 rounded-lg shadow-md flex flex-col justify-end items-center p-2 transition-transform hover:scale-105 cursor-pointer relative"
-                  style={{ backgroundColor: color }}
-                  onClick={() => copyToClipboard(color)}
-                >
-                  <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 text-white text-sm rounded-lg opacity-0 hover:opacity-100 transition-opacity">
-                    {copiedColor === color ? 'Copied!' : 'Click to copy'}
-                  </div>
-                  <span className="text-white text-xs bg-black bg-opacity-50 rounded px-1 py-0.5">
-                    {color.toUpperCase()}
-                  </span>
+            )];
+          } else {
+            const subSliceAngle = segmentAngle / completedHabits.length;
+            slices = completedHabits.map(([habitId, _], index) => {
+              const subStartAngle = startAngle + subSliceAngle * index;
+              const subEndAngle = subStartAngle + subSliceAngle;
+  
+              const x1 = center + baseRadius * Math.cos((subStartAngle * Math.PI) / 180);
+              const y1 = center + baseRadius * Math.sin((subStartAngle * Math.PI) / 180);
+              const x2 = center + baseRadius * Math.cos((subEndAngle * Math.PI) / 180);
+              const y2 = center + baseRadius * Math.sin((subEndAngle * Math.PI) / 180);
+  
+              const largeArcFlag = subSliceAngle > 180 ? 1 : 0;
+  
+              const habit = habits.find(h => h.id === habitId);
+  
+              return (
+                <path
+                  key={`slice-${dayIndex}-${index}`}
+                  d={`M${center},${center} L${x1},${y1} A${baseRadius},${baseRadius} 0 ${largeArcFlag},1 ${x2},${y2} Z`}
+                  fill={habit?.color || '#e5e7eb'}
+                  stroke="#ffffff"
+                  strokeWidth="1"
+                  className="cursor-pointer hover:opacity-80 transition-opacity"
+                />
+              );
+            });
+          }
+  
+          return (
+            <Popover key={`popover-${dayIndex}`}>
+              <PopoverTrigger asChild>
+                <g>{slices}</g>
+              </PopoverTrigger>
+              <PopoverContent>
+                <div className="p-2">
+                  <h3 className="font-semibold mb-2">Day {dayNumber}</h3>
+                  {habits.map((habit) => (
+                    <div key={habit.id} className="mb-1">
+                      <CustomCheckbox
+                        checked={dayHabits[habit.id] || false}
+                        onChange={() => toggleHabit(dayNumber, habit.id)}
+                        label={habit.name}
+                        color={habit.color}
+                      />
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+              </PopoverContent>
+            </Popover>
+          );
+        })}
+  
+        {Array.from({ length: daysInMonth }).map((_, dayIndex) => {
+          const dayNumber = dayIndex + 1;
+          const angle = (segmentAngle * dayIndex - 90 + segmentAngle / 2) * (Math.PI / 180);
+          const textRadius = baseRadius + 20;
+          const x = center + textRadius * Math.cos(angle);
+          const y = center + textRadius * Math.sin(angle);
+          return (
+            <text
+              key={`label-${dayIndex}`}
+              x={x}
+              y={y}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fontSize="12"
+              fill="#6b7280"
+            >
+              {dayNumber}
+            </text>
+          );
+        })}
+      </svg>
+    );
+  };
+
+  const renderLegend = () => (
+    <div className="mt-6 flex flex-wrap justify-center space-x-4">
+      {habits.map((habit) => (
+        <div key={habit.id} className="flex items-center space-x-2">
+          <span
+            className="w-4 h-4 rounded-full"
+            style={{ backgroundColor: habit.color }}
+          ></span>
+          <span>{habit.name}</span>
+        </div>
+      ))}
     </div>
   );
-}
+
+  return (
+    <div className="min-h-screen bg-gray-100 p-4 sm:p-8">
+      <Card className="max-w-5xl mx-auto">
+        <CardHeader>
+          <CardTitle className="text-2xl">Habit Wheel</CardTitle>
+          <CardDescription className="text-sm">
+            Track your habits visually for {new Date(currentYear, currentMonth).toLocaleString('default', { month: 'long' })} {currentYear}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6">
+            <div className="flex items-center space-x-2">
+              <Button onClick={() => setIsDialogOpen(true)} className="flex items-center">
+                <span className="mr-2">➕</span> Add Habit
+              </Button>
+            </div>
+          </div>
+
+          {habits.length === 0 ? (
+            <div className="text-center text-gray-500">No habits added yet.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              {renderWheel()}
+              {renderLegend()}
+              <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                {habits.map((habit) => (
+                  <Card key={habit.id} className="flex items-center p-4">
+                    <span
+                      className="w-4 h-4 rounded-full mr-3"
+                      style={{ backgroundColor: habit.color }}
+                    ></span>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">{habit.name}</span>
+                        <div className="flex space-x-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              setCurrentHabit(habit);
+                              setNewHabit({ name: habit.name, color: habit.color });
+                              setIsEditDialogOpen(true);
+                            }}
+                            aria-label={`Edit ${habit.name}`}
+                          >
+                            ✏️
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeHabit(habit.id)}
+                            aria-label={`Remove ${habit.name}`}
+                          >
+                            🗑️
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        Streak: {calculateStreak(habit.id)} day(s)
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add New Habit</DialogTitle>
+            <DialogDescription>
+              Enter the details of the habit you want to track.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Input
+              placeholder="Habit Name"
+              value={newHabit.name}
+              onChange={(e) => setNewHabit({ ...newHabit, name: e.target.value })}
+            />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Select Color
+              </label>
+              <input
+                type="color"
+                value={newHabit.color}
+                onChange={(e) => setNewHabit({ ...newHabit, color: e.target.value })}
+                className="w-full h-10 border rounded"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={addHabit}>Add</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Habit</DialogTitle>
+            <DialogDescription>
+              Modify the details of your habit.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Input
+              placeholder="Habit Name"
+              value={newHabit.name}
+              onChange={(e) => setNewHabit({ ...newHabit, name: e.target.value })}
+            />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Select Color
+              </label>
+              <input
+                type="color"
+                value={newHabit.color}
+                onChange={(e) => setNewHabit({ ...newHabit, color: e.target.value })}
+                className="w-full h-10 border rounded"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={updateHabit}>Update</Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
 
 export default App;
