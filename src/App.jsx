@@ -1,143 +1,89 @@
-import React, { Suspense, lazy } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, useParams } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-// Dynamically import all model components
-const modelImports = import.meta.glob('./tasks/*/*.jsx');
+// Utility function to convert hex to RGB
+const hexToRgb = hex => {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result ? {
+    r: parseInt(result[1], 16),
+    g: parseInt(result[2], 16),
+    b: parseInt(result[3], 16)
+  } : null;
+};
 
-// Extract unique task IDs from the file paths
-const taskIds = Array.from(
-  new Set(
-    Object.keys(modelImports).map((path) => {
-      const parts = path.split('/');
-      return parts[2]; // Assuming './tasks/{taskId}/component.jsx'
-    })
-  )
-);
+// Color harmony functions
+const generateHarmony = (baseColor, type) => {
+  const { r, g, b } = hexToRgb(baseColor);
+  let colors = [];
 
-// Helper to dynamically load a component
-const loadComponent = (taskId, componentName) => {
-  const path = `./tasks/${taskId}/${componentName}.jsx`;
-  const importFunc = modelImports[path];
-  if (!importFunc) {
-    return null;
+  switch(type) {
+    case 'complementary':
+      colors = [{ r: 255 - r, g: 255 - g, b: 255 - b }];
+      break;
+    // Implement other harmony types similarly
+    default:
+      colors = [{ r, g, b }]; // Default to base color
   }
-  return lazy(importFunc);
-};
 
-// Styles
-const styles = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: '100vh',
-    padding: '20px',
-    boxSizing: 'border-box',
-    fontFamily: 'Arial, sans-serif',
-  },
-  heading: {
-    color: '#333',
-    marginBottom: '20px',
-  },
-  list: {
-    listStyle: 'none',
-    padding: 0,
-    margin: 0,
-    maxHeight: '60vh',
-    overflowY: 'auto',
-    width: '100%',
-    maxWidth: '300px',
-    border: '1px solid #ccc',
-    borderRadius: '5px',
-  },
-  listItem: {
-    padding: '10px',
-    borderBottom: '1px solid #eee',
-  },
-  link: {
-    textDecoration: 'none',
-    color: '#007bff',
-    display: 'block',
-    transition: 'background-color 0.3s',
-  },
-  backLink: {
-    marginTop: '20px',
-    textDecoration: 'none',
-    color: '#6c757d',
-  },
-};
-
-const Home = () => (
-  <div style={styles.container}>
-    <h1 style={styles.heading}>Tasks</h1>
-    <ul style={styles.list}>
-      {taskIds.map((taskId) => (
-        <li key={taskId} style={styles.listItem}>
-          <Link to={`/tasks/${taskId}`} style={styles.link}>{taskId}</Link>
-        </li>
-      ))}
-    </ul>
-  </div>
-);
-
-const Task = () => {
-  const { taskId } = useParams();
-  const components = ['modelA', 'modelB', 'ideal'];
-  return (
-    <div style={styles.container}>
-      <h2 style={styles.heading}>Task: {taskId}</h2>
-      <ul style={styles.list}>
-        {components.map((comp) => (
-          <li key={comp} style={styles.listItem}>
-            <Link to={`/tasks/${taskId}/${comp}`} style={styles.link}>{comp}</Link>
-          </li>
-        ))}
-      </ul>
-      <Link to="/" style={styles.backLink}>Back to Tasks</Link>
-    </div>
+  return colors.map(color => 
+    `#${((1 << 24) + (color.r << 16) + (color.g << 8) + color.b).toString(16).slice(1)}`
   );
 };
 
-const TaskComponent = () => {
-  const { taskId, componentName } = useParams();
-  const Component = loadComponent(taskId, componentName);
-  if (!Component) {
-    return (
-      <div style={styles.container}>
-        <h3 style={styles.heading}>Component not found.</h3>
-        <Link to={`/tasks/${taskId}`} style={styles.backLink}>Back to Task</Link>
-      </div>
-    );
-  }
-  return (
-    <div style={styles.container}>
-      <h3 style={styles.heading}>{componentName}</h3>
-      <Suspense fallback={<div>Loading...</div>}>
-        <Component />
-      </Suspense>
-      <Link to={`/tasks/${taskId}`} style={styles.backLink}>Back to Task</Link>
-    </div>
-  );
-};
+function ColorSchemeGenerator() {
+  const [baseColor, setBaseColor] = useState("#FF5733");
+  const [harmonyType, setHarmonyType] = useState('complementary');
+  const [colors, setColors] = useState([]);
+  
+  useEffect(() => {
+    setColors(generateHarmony(baseColor, harmonyType));
+  }, [baseColor, harmonyType]);
 
-const App = () => (
-  <Router>
-    <Routes>
-      <Route path="/" element={<Home />} />
-      <Route path="/tasks/:taskId" element={<Task />} />
-      <Route path="/tasks/:taskId/:componentName" element={<TaskComponent />} />
-      <Route
-        path="*"
-        element={
-          <div style={styles.container}>
-            <h2 style={styles.heading}>Page Not Found</h2>
-            <Link to="/" style={styles.backLink}>Go to Home</Link>
+  const copyToClipboard = (color) => {
+    navigator.clipboard.writeText(color).then(() => {
+      alert('Color copied to clipboard!');
+    });
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-r from-blue-500 to-purple-500">
+      <Card className="w-full max-w-md p-4 sm:p-8">
+        <CardHeader>
+          <CardTitle>Color Scheme Generator</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <input 
+            type="color" 
+            value={baseColor}
+            onChange={(e) => setBaseColor(e.target.value)}
+            className="w-full mb-4"
+          />
+          <select 
+            value={harmonyType} 
+            onChange={(e) => setHarmonyType(e.target.value)}
+            className="mb-4 p-2 border rounded"
+          >
+            {['complementary', 'analogous', 'triadic'].map(type => 
+              <option key={type} value={type}>{type}</option>
+            )}
+          </select>
+          <div className="flex space-x-2 overflow-x-auto">
+            {colors.map((color, idx) => (
+              <div 
+                key={idx} 
+                style={{ backgroundColor: color }}
+                className="h-24 w-24 flex-shrink-0 rounded cursor-pointer hover:scale-105 transition-transform"
+                onClick={() => copyToClipboard(color)}
+                title="Click to copy"
+              ></div>
+            ))}
           </div>
-        }
-      />
-    </Routes>
-  </Router>
-);
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
-export default App;
+export default function App() {
+  return <ColorSchemeGenerator />;
+}
