@@ -1,138 +1,332 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Slider } from "@/components/ui/slider";
-//SelectContent added by trainer, model failed to wrap the content of the Select in it and was throwing an error
-import { Select, SelectItem, SelectContent } from "@/components/ui/select";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Slider } from '@/components/ui/slider';
 
-const harmonyRules = {
-  complementary: 2,
-  analogous: 3,
-  triadic: 3,
-  tetradic: 4,
-  monochromatic: 5,
-  splitComplementary: 3,
-};
-
-function hexToHsl(hex) {
-  let r = parseInt(hex.slice(1,3),16)/255,
-      g = parseInt(hex.slice(3,5),16)/255,
-      b = parseInt(hex.slice(5,7),16)/255;
-  let max = Math.max(r, g, b), min = Math.min(r, g, b);
-  let h, s, l = (max + min) / 2;
-
-  if(max == min){
-    h = s = 0; // achromatic
-  } else {
-    let d = max - min;
-    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-    switch(max) {
-      case r: h = (g - b) / d + (g < b ? 6 : 0); break;
-      case g: h = (b - r) / d + 2; break;
-      case b: h = (r - g) / d + 4; break;
-    }
-    h /= 6;
-  }
-  return [h * 360, s * 100, l * 100];
-}
-
-function hslToHex(h, s, l) {
-  h /= 360; s /= 100; l /= 100;
-  let r, g, b;
-  if (s === 0) {
-    r = g = b = l; // achromatic
-  } else {
-    const hue2rgb = (p, q, t) => {
-      if (t < 0) t += 1;
-      if (t > 1) t -= 1;
-      if (t < 1/6) return p + (q - p) * 6 * t;
-      if (t < 1/2) return q;
-      if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
-      return p;
-    };
-    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-    const p = 2 * l - q;
-    r = hue2rgb(p, q, h + 1/3);
-    g = hue2rgb(p, q, h);
-    b = hue2rgb(p, q, h - 1/3);
-  }
-  return '#' + [r, g, b].map(x => Math.round(x * 255).toString(16).padStart(2, '0')).join('');
-}
-
-function generateColors(baseHsl, rule, adjustments) {
-  const [h, s, l] = baseHsl;
-  let colors = [baseHsl];
-  const angle = 360 / harmonyRules[rule];
-  
-  for(let i = 1; i < harmonyRules[rule]; i++) {
-    let newH = (h + angle * i) % 360;
-    colors.push([(newH + adjustments.hue) % 360, s + adjustments.saturation, l + adjustments.brightness]);
-  }
-  
-  return colors.map(hsl => hslToHex(...hsl.map(v => Math.round(v))));
-}
-
-export default function App() {
-  const [baseColor, setBaseColor] = useState('#007BFF');
-  const [harmony, setHarmony] = useState('complementary');
-  const [adjustments, setAdjustments] = useState({hue: 0, saturation: 0, brightness: 0});
-  const [generatedColors, setGeneratedColors] = useState([]);
+function App() {
+  const [baseColor, setBaseColor] = useState('#3490dc');
+  const [harmonyRule, setHarmonyRule] = useState('Complementary');
+  const [hue, setHue] = useState(0);
+  const [saturation, setSaturation] = useState(0);
+  const [brightness, setBrightness] = useState(0);
+  const [generatedPalette, setGeneratedPalette] = useState([]);
+  const [copiedColor, setCopiedColor] = useState(null);
 
   useEffect(() => {
-    const baseHsl = hexToHsl(baseColor);
-    setGeneratedColors(generateColors(baseHsl, harmony, adjustments));
-  }, [baseColor, harmony, adjustments]);
+    generatePalette();
+  }, [baseColor, harmonyRule, hue, saturation, brightness]);
 
-  const handleColorChange = (e) => {
+  useEffect(() => {
+    if (copiedColor) {
+      const timer = setTimeout(() => {
+        setCopiedColor(null);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [copiedColor]);
+
+  const generatePalette = () => {
+    const baseHSL = hexToHSL(baseColor);
+    let colors = [];
+
+    switch (harmonyRule) {
+      case 'Complementary':
+        colors = getComplementary(baseHSL);
+        break;
+      case 'Analogous':
+        colors = getAnalogous(baseHSL);
+        break;
+      case 'Triadic':
+        colors = getTriadic(baseHSL);
+        break;
+      case 'Tetradic':
+        colors = getTetradic(baseHSL);
+        break;
+      case 'Monochromatic':
+        colors = getMonochromatic(baseHSL);
+        break;
+      case 'Split-complementary':
+        colors = getSplitComplementary(baseHSL);
+        break;
+      default:
+        colors = [baseColor];
+    }
+
+    // Apply adjustments
+    const adjustedColors = colors.map((color) => {
+      const hsl = hexToHSL(color);
+      hsl.h = (hsl.h + hue + 360) % 360;
+      hsl.s = clamp(hsl.s + saturation, 0, 100);
+      hsl.l = clamp(hsl.l + brightness, 0, 100);
+      return HSLToHex(hsl);
+    });
+
+    setGeneratedPalette(adjustedColors);
+  };
+
+  // Color Harmony Functions
+  const getComplementary = (hsl) => {
+    const complementaryHue = (hsl.h + 180) % 360;
+    return [
+      HSLToHex(hsl),
+      HSLToHex({ ...hsl, h: complementaryHue }),
+    ];
+  };
+
+  const getAnalogous = (hsl) => {
+    const angle = 30;
+    return [
+      HSLToHex({ ...hsl, h: (hsl.h - angle + 360) % 360 }),
+      HSLToHex(hsl),
+      HSLToHex({ ...hsl, h: (hsl.h + angle) % 360 }),
+    ];
+  };
+
+  const getTriadic = (hsl) => {
+    return [
+      HSLToHex(hsl),
+      HSLToHex({ ...hsl, h: (hsl.h + 120) % 360 }),
+      HSLToHex({ ...hsl, h: (hsl.h + 240) % 360 }),
+    ];
+  };
+
+  const getTetradic = (hsl) => {
+    return [
+      HSLToHex(hsl),
+      HSLToHex({ ...hsl, h: (hsl.h + 90) % 360 }),
+      HSLToHex({ ...hsl, h: (hsl.h + 180) % 360 }),
+      HSLToHex({ ...hsl, h: (hsl.h + 270) % 360 }),
+    ];
+  };
+
+  const getMonochromatic = (hsl) => {
+    return [
+      HSLToHex({ ...hsl, l: clamp(hsl.l - 30, 0, 100) }),
+      HSLToHex({ ...hsl, l: clamp(hsl.l - 15, 0, 100) }),
+      HSLToHex(hsl),
+      HSLToHex({ ...hsl, l: clamp(hsl.l + 15, 0, 100) }),
+      HSLToHex({ ...hsl, l: clamp(hsl.l + 30, 0, 100) }),
+    ];
+  };
+
+  const getSplitComplementary = (hsl) => {
+    return [
+      HSLToHex(hsl),
+      HSLToHex({ ...hsl, h: (hsl.h + 150) % 360 }),
+      HSLToHex({ ...hsl, h: (hsl.h + 210) % 360 }),
+    ];
+  };
+
+  // Utility function to clamp values
+  const clamp = (value, min, max) => {
+    return Math.min(max, Math.max(min, value));
+  };
+
+  // Color Conversion Functions
+  const hexToHSL = (H) => {
+    let r = 0, g = 0, b = 0;
+    if (H.length === 4) {
+      r = parseInt(H[1] + H[1], 16);
+      g = parseInt(H[2] + H[2], 16);
+      b = parseInt(H[3] + H[3], 16);
+    } else if (H.length === 7) {
+      r = parseInt(H[1] + H[2], 16);
+      g = parseInt(H[3] + H[4], 16);
+      b = parseInt(H[5] + H[6], 16);
+    }
+    r /= 255;
+    g /= 255;
+    b /= 255;
+    const cmin = Math.min(r, g, b);
+    const cmax = Math.max(r, g, b);
+    const delta = cmax - cmin;
+    let h = 0, s = 0, l = 0;
+
+    if (delta === 0) h = 0;
+    else if (cmax === r) h = ((g - b) / delta) % 6;
+    else if (cmax === g) h = (b - r) / delta + 2;
+    else h = (r - g) / delta + 4;
+
+    h = Math.round(h * 60);
+    if (h < 0) h += 360;
+
+    l = (cmax + cmin) / 2;
+    s = delta === 0 ? 0 : delta / (1 - Math.abs(2 * l - 1));
+    s = +(s * 100).toFixed(1);
+    l = +(l * 100).toFixed(1);
+
+    return { h, s, l };
+  };
+
+  const HSLToHex = ({ h, s, l }) => {
+    s /= 100;
+    l /= 100;
+    const c = (1 - Math.abs(2 * l - 1)) * s;
+    const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+    const m = l - c / 2;
+    let r = 0, g = 0, b = 0;
+
+    if (0 <= h && h < 60) {
+      r = c; g = x; b = 0;
+    } else if (60 <= h && h < 120) {
+      r = x; g = c; b = 0;
+    } else if (120 <= h && h < 180) {
+      r = 0; g = c; b = x;
+    } else if (180 <= h && h < 240) {
+      r = 0; g = x; b = c;
+    } else if (240 <= h && h < 300) {
+      r = x; g = 0; b = c;
+    } else if (300 <= h && h < 360) {
+      r = c; g = 0; b = x;
+    }
+
+    r = Math.round((r + m) * 255).toString(16).padStart(2, '0');
+    g = Math.round((g + m) * 255).toString(16).padStart(2, '0');
+    b = Math.round((b + m) * 255).toString(16).padStart(2, '0');
+
+    return `#${r}${g}${b}`;
+  };
+
+  const handleColorInputChange = (e) => {
     setBaseColor(e.target.value);
   };
 
   const copyToClipboard = (color) => {
     navigator.clipboard.writeText(color).then(() => {
-      alert(`Color ${color} copied to clipboard!`);
+      setCopiedColor(color);
     });
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center">
-      <Card className="w-full max-w-lg p-4">
-        <CardHeader>
-          <CardTitle className="text-center text-2xl">Color Scheme Generator</CardTitle>
+    <div className="min-h-screen bg-gradient-to-br from-gray-100 to-gray-200 p-4 sm:p-8">
+      <Card className="max-w-4xl mx-auto shadow-lg">
+        <CardHeader className="bg-gradient-to-r from-blue-500 to-purple-600 text-white">
+          <CardTitle className="text-2xl font-bold">Color Scheme Generator</CardTitle>
+          <p className="text-sm opacity-80">
+            Create harmonious color palettes for your designs with ease.
+          </p>
         </CardHeader>
-        <CardContent>
-          <Input 
-            type="color" 
-            value={baseColor} 
-            onChange={handleColorChange} 
-            className="mb-4 w-full"
-            label="Base Color"
-          />
-          <Select value={harmony} onChange={(e) => setHarmony(e.target.value)} className="mb-4">
-            <SelectContent>
-              {Object.keys(harmonyRules).map(rule => 
-                <SelectItem key={rule} value={rule}>{rule.replace(/([A-Z])/g, ' $1').trim()}</SelectItem>
-              )}
-            </SelectContent>
-          </Select>
-          <div className="space-y-2">
-            <Slider defaultValue={[0]} max={360} onValueChange={(value) => setAdjustments(prev => ({...prev, hue: value[0]}))} />
-            <Slider defaultValue={[0]} max={100} onValueChange={(value) => setAdjustments(prev => ({...prev, saturation: value[0]}))} />
-            <Slider defaultValue={[0]} max={100} onValueChange={(value) => setAdjustments(prev => ({...prev, brightness: value[0]}))} />
+        <CardContent className="space-y-6 p-6">
+          {/* Base Color Selection */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4">
+            <label className="w-full sm:w-1/3 font-medium text-gray-700">Base Color:</label>
+            <div className="flex-1 flex items-center space-x-2">
+              <input
+                type="color"
+                value={baseColor}
+                onChange={(e) => setBaseColor(e.target.value)}
+                className="w-16 h-10 rounded cursor-pointer"
+              />
+              <Input
+                type="text"
+                value={baseColor}
+                onChange={handleColorInputChange}
+                placeholder="#3490dc"
+                className="flex-1"
+              />
+            </div>
           </div>
-          <div className="flex flex-wrap mt-4">
-            {generatedColors.map((color, idx) => (
-              <div 
-                key={idx} 
-                className="h-20 w-20 cursor-pointer hover:scale-105 transition-transform" 
-                style={{backgroundColor: color}} 
-                onClick={() => copyToClipboard(color)}
-                title="Click to copy"
-              ></div>
-            ))}
+
+          {/* Harmony Selector */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4">
+            <label className="w-full sm:w-1/3 font-medium text-gray-700">Color Harmony:</label>
+            <Select
+              value={harmonyRule}
+              onValueChange={(value) => setHarmonyRule(value)}
+              className="w-full sm:w-2/3"
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select harmony" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Complementary">Complementary (2 colors)</SelectItem>
+                <SelectItem value="Analogous">Analogous (3 colors)</SelectItem>
+                <SelectItem value="Triadic">Triadic (3 colors)</SelectItem>
+                <SelectItem value="Tetradic">Tetradic (4 colors)</SelectItem>
+                <SelectItem value="Monochromatic">Monochromatic (5 colors)</SelectItem>
+                <SelectItem value="Split-complementary">
+                  Split-complementary (3 colors)
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Adjustments */}
+          <div className="space-y-4">
+            <div>
+              <label className="block mb-1 font-medium text-gray-700">Hue Adjustment:</label>
+              <Slider
+                value={[hue]}
+                onValueChange={(val) => setHue(val[0])}
+                max={360}
+                step={1}
+                className="my-2"
+              />
+              <span className="text-sm text-gray-600">{hue}°</span>
+            </div>
+            <div>
+              <label className="block mb-1 font-medium text-gray-700">Saturation Adjustment:</label>
+              <Slider
+                value={[saturation]}
+                onValueChange={(val) => setSaturation(val[0])}
+                min={-100}
+                max={100}
+                step={1}
+                className="my-2"
+              />
+              <span className="text-sm text-gray-600">{saturation}%</span>
+            </div>
+            <div>
+              <label className="block mb-1 font-medium text-gray-700">Brightness Adjustment:</label>
+              <Slider
+                value={[brightness]}
+                onValueChange={(val) => setBrightness(val[0])}
+                min={-100}
+                max={100}
+                step={1}
+                className="my-2"
+              />
+              <span className="text-sm text-gray-600">{brightness}%</span>
+            </div>
+          </div>
+
+          {/* Generated Palette */}
+          <div>
+            <label className="block mb-2 font-medium text-gray-700">Generated Palette:</label>
+            <div className="flex flex-wrap gap-4">
+              {generatedPalette.map((color, index) => (
+                <div
+                  key={index}
+                  className="w-24 h-24 rounded-lg shadow-md flex flex-col justify-end items-center p-2 transition-transform hover:scale-105 cursor-pointer relative"
+                  style={{ backgroundColor: color }}
+                  onClick={() => copyToClipboard(color)}
+                >
+                  <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 text-white text-sm rounded-lg opacity-0 hover:opacity-100 transition-opacity">
+                    {copiedColor === color ? 'Copied!' : 'Click to copy'}
+                  </div>
+                  <span className="text-white text-xs bg-black bg-opacity-50 rounded px-1 py-0.5">
+                    {color.toUpperCase()}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         </CardContent>
       </Card>
     </div>
   );
 }
+
+export default App;
