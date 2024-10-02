@@ -1,90 +1,120 @@
-// App.jsx
-import React, { useState, useEffect, useMemo } from 'react';
-import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
-import { format, eachDayOfInterval, getDaysInMonth, startOfMonth } from 'date-fns';
+import React, { useState, useEffect, useRef } from 'react';
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@/components/ui/card";
 
-// Helper function to generate color palette
-const generateColor = (index) => {
-  const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F'];
-  return colors[index % colors.length];
+// Helper function to format time
+const formatTime = (time) => {
+  const minutes = Math.floor(time / 60);
+  const seconds = time % 60;
+  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 };
 
-function HabitWheel({ habits, days, onUpdateHabit }) {
-  return (
-    <div className="grid grid-cols-7 gap-2 p-4">
-      {days.map((day, index) => {
-        const dayHabits = habits.filter(h => h.dates.includes(day));
-        const angle = 360 / days.length;
-        const transform = `rotate(${angle * index - 90}deg)`;
-        
-        return (
-          <div key={day} style={{ transform }} className="transform origin-center">
-            <div className="w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center">
-              {dayHabits.length > 0 ? (
-                <div style={{ transform: `rotate(${-angle * index}deg)` }}>
-                  <div className="flex">
-                    {dayHabits.map((habit, hIndex) => (
-                      <div key={hIndex} 
-                           className="h-2 w-3 rounded-l-full rounded-r-full" 
-                           style={{ backgroundColor: habit.color, width: `${100 / dayHabits.length}%` }}
-                           onClick={() => onUpdateHabit(habit.id, day)} />
-                    ))}
-                  </div>
-                </div>
-              ) : <span className="text-xs">{format(new Date(day), 'd')}</span>}
-            </div>
+const TimerSettings = ({ settings, updateSettings, invalidRounds }) => (
+  <Card className="mb-4">
+    <CardContent>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="font-bold">Rounds</label>
+          <div className="flex items-center">
+            <Button onClick={() => updateSettings('rounds', -1)}>-</Button>
+            <Input 
+              value={settings.rounds} 
+              onChange={(e) => updateSettings('rounds', e.target.value)} 
+              className={`${invalidRounds ? 'border-red-500' : ''}`}
+            />
+            <Button onClick={() => updateSettings('rounds', 1)}>+</Button>
           </div>
-        );
-      })}
+        </div>
+        {/* Similar setup for Round Time and Rest Time */}
+      </div>
+    </CardContent>
+  </Card>
+);
+
+const TimerDisplay = ({ timeLeft, currentRound, totalRounds }) => (
+  <div className="text-center text-4xl mb-4">
+    {formatTime(timeLeft)} - Round {currentRound} of {totalRounds}
+  </div>
+);
+
+const ControlButtons = ({ onStart, onPause, onResume, onReset, isRunning, isPaused }) => (
+  <div className="flex space-x-4 justify-center">
+    {!isRunning && <Button onClick={onStart}>Start</Button>}
+    {isRunning && <Button variant="outline" onClick={isPaused ? onResume : onPause}>
+      {isPaused ? 'Resume' : 'Pause'}
+    </Button>}
+    {isRunning && <Button variant="destructive" onClick={onReset}>Reset</Button>}
+  </div>
+);
+
+export default function App() {
+  const [settings, setSettings] = useState({
+    rounds: 12,
+    roundTime: 180, // 3 minutes
+    restTime: 60, // 1 minute
+  });
+  const [timeLeft, setTimeLeft] = useState(settings.roundTime);
+  const [currentRound, setCurrentRound] = useState(1);
+  const [isRunning, setIsRunning] = useState(false);
+  const [isRest, setIsRest] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const timerRef = useRef();
+
+  useEffect(() => {
+    if (isRunning && !isPaused) {
+      timerRef.current = setTimeout(() => {
+        if (timeLeft > 0) {
+          setTimeLeft(timeLeft - 1);
+        } else {
+          if (isRest || currentRound === settings.rounds) {
+            if (isRest) setCurrentRound(round => round + 1);
+            setIsRest(!isRest);
+            setTimeLeft(isRest ? settings.roundTime : settings.restTime);
+            if (currentRound > settings.rounds) {
+              setIsRunning(false);
+            }
+          } else {
+            setIsRest(true);
+            setTimeLeft(settings.restTime);
+          }
+        }
+      }, 1000);
+    }
+
+    return () => clearTimeout(timerRef.current);
+  }, [timeLeft, isRunning, isPaused, currentRound, settings]);
+
+  const updateSettings = (field, value) => {
+    setSettings(prev => ({...prev, [field]: Math.max(field === 'rounds' ? 1 : 0, parseInt(prev[field] + value))}));
+  };
+
+  const handleStart = () => setIsRunning(true);
+  const handlePause = () => setIsPaused(true);
+  const handleResume = () => setIsPaused(false);
+  const handleReset = () => {
+    setIsRunning(false);
+    setIsPaused(false);
+    setTimeLeft(settings.roundTime);
+    setCurrentRound(1);
+    setIsRest(false);
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-100 p-4">
+      <div className="max-w-lg mx-auto bg-gradient-to-r from-red-500 to-orange-500 p-6 rounded-lg shadow-lg">
+        <h1 className="text-3xl font-bold text-white mb-4">Boxing Timer</h1>
+        <TimerSettings settings={settings} updateSettings={updateSettings} invalidRounds={settings.rounds < 1} />
+        <TimerDisplay timeLeft={timeLeft} currentRound={currentRound} totalRounds={settings.rounds} />
+        <ControlButtons 
+          onStart={handleStart} 
+          onPause={handlePause} 
+          onResume={handleResume} 
+          onReset={handleReset}
+          isRunning={isRunning} 
+          isPaused={isPaused} 
+        />
+      </div>
     </div>
   );
 }
-
-function App() {
-  const [habits, setHabits] = useState([]);
-  const now = new Date();
-  const start = startOfMonth(now);
-  const days = useMemo(() => eachDayOfInterval({ start, end: new Date(now.getFullYear(), now.getMonth() + 1, 0) }), [now]);
-
-  const addHabit = (name, color) => {
-    setHabits(prev => [...prev, { id: Date.now(), name, color, dates: [] }]);
-  };
-
-  const updateHabit = (id, date) => {
-    setHabits(prev => 
-      prev.map(habit => 
-        habit.id === id ? { 
-          ...habit, 
-          dates: habit.dates.includes(date) ? habit.dates.filter(d => d !== date) : [...habit.dates, date] 
-        } : habit
-      )
-    );
-  };
-
-  return (
-    <div className="container mx-auto p-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Habit Wheel</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <HabitWheel habits={habits} days={days} onUpdateHabit={updateHabit} />
-          <div className="mt-4">
-            {habits.map((habit, idx) => (
-              <div key={habit.id} className="flex items-center mb-2">
-                <div style={{ backgroundColor: habit.color }} className="w-4 h-4 mr-2 rounded"></div>
-                <span>{habit.name}</span>
-              </div>
-            ))}
-            <Button onClick={() => addHabit('New Habit', generateColor(habits.length))}>Add Habit</Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-export default App;
