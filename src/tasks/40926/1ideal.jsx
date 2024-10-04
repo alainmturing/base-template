@@ -1,14 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Card,
   CardContent,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { AlertCircle, Play, Pause, RotateCcw } from 'lucide-react';
 
 export default function App() {
   const [rounds, setRounds] = useState(3);
@@ -16,51 +16,47 @@ export default function App() {
   const [roundSeconds, setRoundSeconds] = useState(0);
   const [restMinutes, setRestMinutes] = useState(1);
   const [restSeconds, setRestSeconds] = useState(30);
-
-  const [roundsError, setRoundsError] = useState('');
-  const [isRunning, setIsRunning] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
+  const [timerRunning, setTimerRunning] = useState(false);
+  const [timerPaused, setTimerPaused] = useState(false);
   const [currentRound, setCurrentRound] = useState(1);
-  const [timeLeft, setTimeLeft] = useState(0);
   const [isRest, setIsRest] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(roundMinutes * 60 + roundSeconds);
+  const timerRef = useRef(null);
 
-  // Initialize timeLeft when timer starts
+  const [errors, setErrors] = useState({
+    rounds: false,
+    roundTime: false,
+    restTime: false,
+  });
+
   useEffect(() => {
-    if (isRunning && !isPaused) {
-      if (timeLeft === 0) {
-        if (isRest) {
-          if (currentRound > rounds) {
-            // Timer completed
-            setIsRunning(false);
-            setIsPaused(false);
-            setCurrentRound(1);
-            return;
+    if (timerRunning && !timerPaused) {
+      timerRef.current = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev === 0) {
+            clearInterval(timerRef.current);
+            if (isRest) {
+              if (currentRound < rounds) {
+                setCurrentRound(currentRound + 1);
+                setIsRest(false);
+                return roundMinutes * 60 + roundSeconds;
+              } else {
+                setTimerRunning(false);
+                return 0;
+              }
+            } else {
+              setIsRest(true);
+              return restMinutes * 60 + restSeconds;
+            }
           }
-          setTimeLeft(restMinutes * 60 + restSeconds);
-          setIsRest(false);
-        } else {
-          if (currentRound > rounds) {
-            // Timer completed
-            setIsRunning(false);
-            setIsPaused(false);
-            setCurrentRound(1);
-            return;
-          }
-          setTimeLeft(roundMinutes * 60 + roundSeconds);
-          setIsRest(true);
-        }
-      }
-
-      const timerId = setInterval(() => {
-        setTimeLeft((prev) => prev - 1);
+          return prev - 1;
+        });
       }, 1000);
-
-      return () => clearInterval(timerId);
     }
+    return () => clearInterval(timerRef.current);
   }, [
-    isRunning,
-    isPaused,
-    timeLeft,
+    timerRunning,
+    timerPaused,
     isRest,
     currentRound,
     rounds,
@@ -70,258 +66,250 @@ export default function App() {
     restSeconds,
   ]);
 
-  const handleStart = () => {
-    if (validateRounds()) {
-      setIsRunning(true);
-      setIsPaused(false);
-      setTimeLeft(roundMinutes * 60 + roundSeconds);
+  const handleIncrement = (setter, value) => {
+    setter(Math.max(0, value + 1));
+  };
+
+  const handleDecrement = (setter, value) => {
+    setter(Math.max(0, value - 1));
+  };
+
+  const validateInputs = () => {
+    const newErrors = {
+      rounds: rounds < 1,
+      roundTime: roundMinutes * 60 + roundSeconds < 1,
+      restTime: restMinutes * 60 + restSeconds < 1,
+    };
+    setErrors(newErrors);
+    return !Object.values(newErrors).some(Boolean);
+  };
+
+  const startTimer = () => {
+    if (validateInputs()) {
+      setTimerRunning(true);
+      setTimerPaused(false);
       setCurrentRound(1);
       setIsRest(false);
+      setTimeLeft(roundMinutes * 60 + roundSeconds);
     }
   };
 
-  const handlePause = () => {
-    setIsPaused(!isPaused);
+  const pauseTimer = () => {
+    setTimerPaused(true);
+    clearInterval(timerRef.current);
   };
 
-  const handleReset = () => {
-    setIsRunning(false);
-    setIsPaused(false);
+  const resumeTimer = () => {
+    setTimerPaused(false);
+  };
+
+  const resetTimer = () => {
+    clearInterval(timerRef.current);
+    setTimerRunning(false);
+    setTimerPaused(false);
     setCurrentRound(1);
-    setTimeLeft(0);
     setIsRest(false);
-    // Reset to initial values
-  };
-
-  const validateRounds = () => {
-    if (rounds <= 0) {
-      setRoundsError('Number of rounds must be greater than 0.');
-      return false;
-    }
-    setRoundsError('');
-    return true;
-  };
-
-  const increment = (setter, value) => {
-    setter(value + 1);
-  };
-
-  const decrement = (setter, value) => {
-    if (value > 0) {
-      setter(value - 1);
-    }
+    setTimeLeft(roundMinutes * 60 + roundSeconds);
   };
 
   const formatTime = (seconds) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m.toString().padStart(2, '0')}:${s
+    const m = Math.floor(seconds / 60)
       .toString()
-      .padStart(2, '0')}`;
+      .padStart(2, '0');
+    const s = (seconds % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
   };
 
+  const TimerInput = ({ label, minutes, seconds, setMinutes, setSeconds, error, disabled }) => (
+    <div className="space-y-2">
+      <Label className="text-sm font-semibold text-gray-700">{label}</Label>
+      <div className="flex items-center space-x-2">
+        <div className="flex-1">
+          <Label className="text-xs text-gray-600">Min</Label>
+          <div className="flex items-center">
+            <Button
+              type="button"
+              onClick={() => handleDecrement(setMinutes, minutes)}
+              className="w-8 h-8 bg-indigo-500 hover:bg-indigo-600 text-white"
+              disabled={disabled}
+            >
+              -
+            </Button>
+            <Input
+              type="number"
+              value={minutes}
+              onChange={(e) => setMinutes(Math.max(0, parseInt(e.target.value) || 0))}
+              className="w-16 text-center mx-1 border-indigo-300"
+              disabled={disabled}
+            />
+            <Button
+              type="button"
+              onClick={() => handleIncrement(setMinutes, minutes)}
+              className="w-8 h-8 bg-indigo-500 hover:bg-indigo-600 text-white"
+              disabled={disabled}
+            >
+              +
+            </Button>
+          </div>
+        </div>
+        <div className="flex-1">
+          <Label className="text-xs text-gray-600">Sec</Label>
+          <div className="flex items-center">
+            <Button
+              type="button"
+              onClick={() => handleDecrement(setSeconds, seconds)}
+              className="w-8 h-8 bg-indigo-500 hover:bg-indigo-600 text-white"
+              disabled={disabled}
+            >
+              -
+            </Button>
+            <Input
+              type="number"
+              value={seconds}
+              onChange={(e) => setSeconds(Math.max(0, parseInt(e.target.value) || 0))}
+              className="w-16 text-center mx-1 border-indigo-300"
+              disabled={disabled}
+            />
+            <Button
+              type="button"
+              onClick={() => handleIncrement(setSeconds, seconds)}
+              className="w-8 h-8 bg-indigo-500 hover:bg-indigo-600 text-white"
+              disabled={disabled}
+            >
+              +
+            </Button>
+          </div>
+        </div>
+      </div>
+      {error && (
+        <p className="text-red-500 text-xs flex items-center">
+          <AlertCircle className="w-4 h-4 mr-1" />
+          Time must be at least 1 second.
+        </p>
+      )}
+    </div>
+  );
+
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col items-center">
-      <header className="w-full p-4 bg-gradient-to-r from-red-500 to-orange-500">
-        <h1 className="text-white text-2xl font-bold text-center">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-900 to-purple-800 flex flex-col items-center p-4">
+      <header className="w-full py-6 mb-8">
+        <h1 className="text-4xl text-white text-center font-bold tracking-wider">
           Boxing Rounds Timer
         </h1>
       </header>
-      <main className="flex-1 w-full max-w-md p-4">
-        <Card className="mb-4">
-          <CardHeader>
-            <CardTitle>Settings</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {/* Number of Rounds */}
-            <div className="mb-4">
-              <Label htmlFor="rounds">Number of Rounds</Label>
-              <div className="flex items-center mt-1">
-                <input
-                  type="number"
-                  id="rounds"
-                  value={rounds}
-                  onChange={(e) => setRounds(parseInt(e.target.value))}
-                  className={`w-full p-2 border ${
-                    roundsError ? 'border-red-500' : 'border-gray-300'
-                  } rounded`}
-                />
-              </div>
-              {roundsError && (
-                <p className="text-red-500 text-sm mt-1">{roundsError}</p>
-              )}
-            </div>
-            {/* Round Time */}
-            <div className="mb-4">
-              <Label>Round Time</Label>
-              <div className="flex items-center mt-1 space-x-2">
-                {/* Minutes */}
-                <div className="flex-1">
-                  <Label htmlFor="roundMinutes">Minutes</Label>
-                  <div className="flex items-center">
-                    <button
-                      onClick={() =>
-                        decrement(setRoundMinutes, roundMinutes)
-                      }
-                      className="px-2 py-1 bg-gray-200 rounded-l"
-                    >
-                      -
-                    </button>
-                    <input
-                      type="number"
-                      id="roundMinutes"
-                      value={roundMinutes}
-                      onChange={(e) =>
-                        setRoundMinutes(parseInt(e.target.value))
-                      }
-                      className="w-full p-2 border border-gray-300 text-center"
-                    />
-                    <button
-                      onClick={() =>
-                        increment(setRoundMinutes, roundMinutes)
-                      }
-                      className="px-2 py-1 bg-gray-200 rounded-r"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-                {/* Seconds */}
-                <div className="flex-1">
-                  <Label htmlFor="roundSeconds">Seconds</Label>
-                  <div className="flex items-center">
-                    <button
-                      onClick={() =>
-                        decrement(setRoundSeconds, roundSeconds)
-                      }
-                      className="px-2 py-1 bg-gray-200 rounded-l"
-                    >
-                      -
-                    </button>
-                    <input
-                      type="number"
-                      id="roundSeconds"
-                      value={roundSeconds}
-                      onChange={(e) =>
-                        setRoundSeconds(parseInt(e.target.value))
-                      }
-                      className="w-full p-2 border border-gray-300 text-center"
-                    />
-                    <button
-                      onClick={() =>
-                        increment(setRoundSeconds, roundSeconds)
-                      }
-                      className="px-2 py-1 bg-gray-200 rounded-r"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-            {/* Rest Time */}
-            <div className="mb-4">
-              <Label>Rest Time</Label>
-              <div className="flex items-center mt-1 space-x-2">
-                {/* Minutes */}
-                <div className="flex-1">
-                  <Label htmlFor="restMinutes">Minutes</Label>
-                  <div className="flex items-center">
-                    <button
-                      onClick={() => decrement(setRestMinutes, restMinutes)}
-                      className="px-2 py-1 bg-gray-200 rounded-l"
-                    >
-                      -
-                    </button>
-                    <input
-                      type="number"
-                      id="restMinutes"
-                      value={restMinutes}
-                      onChange={(e) =>
-                        setRestMinutes(parseInt(e.target.value))
-                      }
-                      className="w-full p-2 border border-gray-300 text-center"
-                    />
-                    <button
-                      onClick={() => increment(setRestMinutes, restMinutes)}
-                      className="px-2 py-1 bg-gray-200 rounded-r"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-                {/* Seconds */}
-                <div className="flex-1">
-                  <Label htmlFor="restSeconds">Seconds</Label>
-                  <div className="flex items-center">
-                    <button
-                      onClick={() => decrement(setRestSeconds, restSeconds)}
-                      className="px-2 py-1 bg-gray-200 rounded-l"
-                    >
-                      -
-                    </button>
-                    <input
-                      type="number"
-                      id="restSeconds"
-                      value={restSeconds}
-                      onChange={(e) =>
-                        setRestSeconds(parseInt(e.target.value))
-                      }
-                      className="w-full p-2 border border-gray-300 text-center"
-                    />
-                    <button
-                      onClick={() => increment(setRestSeconds, restSeconds)}
-                      className="px-2 py-1 bg-gray-200 rounded-r"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-          <CardFooter>
-            {!isRunning && (
+
+      <Card className="w-full max-w-md bg-white shadow-2xl rounded-2xl overflow-hidden">
+        <CardHeader className="bg-gradient-to-r from-indigo-600 to-purple-600">
+          <CardTitle className="text-2xl font-bold text-white">Settings</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6 p-6">
+          <div className="space-y-2">
+            <Label className="text-sm font-semibold text-gray-700">Rounds</Label>
+            <div className="flex items-center space-x-2">
               <Button
-                onClick={handleStart}
-                className="w-full bg-blue-500 hover:bg-blue-600 text-white"
+                type="button"
+                onClick={() => handleDecrement(setRounds, rounds)}
+                className="w-10 h-10 bg-indigo-500 hover:bg-indigo-600 text-white"
+                disabled={timerRunning || timerPaused}
               >
-                Start Timer
+                -
+              </Button>
+              <Input
+                type="number"
+                value={rounds}
+                onChange={(e) => setRounds(Math.max(1, parseInt(e.target.value) || 1))}
+                className={`w-20 text-center ${errors.rounds ? 'border-red-500' : 'border-indigo-300'}`}
+                disabled={timerRunning || timerPaused}
+              />
+              <Button
+                type="button"
+                onClick={() => handleIncrement(setRounds, rounds)}
+                className="w-10 h-10 bg-indigo-500 hover:bg-indigo-600 text-white"
+                disabled={timerRunning || timerPaused}
+              >
+                +
+              </Button>
+            </div>
+            {errors.rounds && (
+              <p className="text-red-500 text-xs flex items-center">
+                <AlertCircle className="w-4 h-4 mr-1" />
+                Rounds must be at least 1.
+              </p>
+            )}
+          </div>
+
+          <TimerInput
+            label="Round Time (Work Period)"
+            minutes={roundMinutes}
+            seconds={roundSeconds}
+            setMinutes={setRoundMinutes}
+            setSeconds={setRoundSeconds}
+            error={errors.roundTime}
+            disabled={timerRunning || timerPaused}
+          />
+
+          <TimerInput
+            label="Rest Time (Between Rounds)"
+            minutes={restMinutes}
+            seconds={restSeconds}
+            setMinutes={setRestMinutes}
+            setSeconds={setRestSeconds}
+            error={errors.restTime}
+            disabled={timerRunning || timerPaused}
+          />
+
+          {timerRunning && (
+            <div className="text-center space-y-2 bg-gradient-to-r from-indigo-100 to-purple-100 p-4 rounded-xl">
+              <h2 className="text-xl font-bold text-indigo-800">
+                {isRest ? 'Rest Time' : `Round ${currentRound}`}
+              </h2>
+              <p className="text-5xl font-mono font-bold text-indigo-600">
+                {formatTime(timeLeft)}
+              </p>
+            </div>
+          )}
+
+          <div className="flex justify-center space-x-4 mt-6">
+            {!timerRunning && (
+              <Button
+                onClick={startTimer}
+                className="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-full flex items-center transition-colors duration-300"
+              >
+                <Play className="w-5 h-5 mr-2" />
+                Start
               </Button>
             )}
-            {isRunning && (
-              <div className="flex space-x-2 w-full">
+            {timerRunning && (
+              <>
                 <Button
-                  onClick={handlePause}
-                  className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white"
+                  onClick={timerPaused ? resumeTimer : pauseTimer}
+                  className={`${
+                    timerPaused
+                      ? 'bg-green-500 hover:bg-green-600'
+                      : 'bg-yellow-500 hover:bg-yellow-600'
+                  } text-white px-6 py-2 rounded-full flex items-center transition-colors duration-300`}
                 >
-                  {isPaused ? 'Resume' : 'Pause'}
+                  {timerPaused ? (
+                    <>
+                      <Play className="w-5 h-5 mr-2" /> Resume
+                    </>
+                  ) : (
+                    <>
+                      <Pause className="w-5 h-5 mr-2" /> Pause
+                    </>
+                  )}
                 </Button>
                 <Button
-                  onClick={handleReset}
-                  className="flex-1 bg-red-500 hover:bg-red-600 text-white"
+                  onClick={resetTimer}
+                  className="bg-gray-500 hover:bg-gray-600 text-white px-6 py-2 rounded-full flex items-center transition-colors duration-300"
                 >
-                  Reset
+                  <RotateCcw className="w-5 h-5 mr-2" /> Reset
                 </Button>
-              </div>
+              </>
             )}
-          </CardFooter>
-        </Card>
-        {isRunning && (
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                {isRest ? 'Rest Time' : `Round ${currentRound}`}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center text-4xl font-bold">
-                {formatTime(timeLeft)}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </main>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
