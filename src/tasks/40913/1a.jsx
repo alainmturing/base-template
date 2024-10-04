@@ -1,166 +1,153 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+//model tried importing Button from @/components/ui/card
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
-const initialTasks = {
-  backlog: [],
-  doing: [],
-  review: [],
-  done: []
-};
+export default function App() {
+  const [tasks, setTasks] = useState([]);
+  const [newTask, setNewTask] = useState({ title: '', description: '' });
+  const dragItem = useRef();
+  const dragOverItem = useRef();
 
-function App() {
-  const [tasks, setTasks] = useState(initialTasks);
-  const [draggedTask, setDraggedTask] = useState(null);
-  const [editingTask, setEditingTask] = useState({ id: null, content: '' });
-
-  const handleDragStart = (e, task, status) => {
-    e.dataTransfer.setData('text/plain', JSON.stringify({ id: task.id, from: status }));
-    setDraggedTask(task);
+  const handleDragStart = (e, position) => {
+    dragItem.current = position;
   };
 
-  const handleDrop = (e, toStatus) => {
-    e.preventDefault();
-    const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-    if (data.from !== toStatus) {
-      setTasks(prev => ({
-        ...prev,
-        [data.from]: prev[data.from].filter(t => t.id !== data.id),
-        [toStatus]: [...prev[toStatus], { ...tasks[data.from].find(t => t.id === data.id), status: toStatus }]
-      }));
+  const handleDragEnter = (e, position) => {
+    dragOverItem.current = position;
+  };
+
+  const handleDrop = () => {
+    const copyTasks = [...tasks];
+    const dragItemContent = copyTasks[dragItem.current];
+    copyTasks.splice(dragItem.current, 1);
+    copyTasks.splice(dragOverItem.current, 0, dragItemContent);
+    dragItem.current = null;
+    dragOverItem.current = null;
+    setTasks(copyTasks);
+  };
+
+  const addTask = () => {
+    if (newTask.title) {
+      setTasks([...tasks, { ...newTask, status: 'backlog' }]);
+      setNewTask({ title: '', description: '' });
     }
   };
 
-  const handleDragOver = (e) => {
-    e.preventDefault();
-  };
-
-  const addTask = (title, description) => {
-    setTasks(prev => ({
-      ...prev,
-      backlog: [...prev.backlog, { id: Date.now(), title, description, status: 'backlog' }]
-    }));
-  };
-
-  const startEditing = (task) => {
-    setEditingTask({ id: task.id, content: task.description });
-  };
-
-  const saveEdit = (taskId) => {
-    setTasks(prev => ({
-      ...prev,
-      [prev[editingTask.status]]: prev[editingTask.status].map(task => 
-        task.id === taskId ? { ...task, description: editingTask.content } : task
-      )
-    }));
-    setEditingTask({ id: null, content: '' });
+  const moveTask = (index, direction) => {
+    const newStatus = ['backlog', 'doing', 'review', 'done'][['backlog', 'doing', 'review', 'done'].indexOf(tasks[index].status) + direction];
+    if (newStatus) {
+      const updatedTasks = [...tasks];
+      updatedTasks[index] = { ...updatedTasks[index], status: newStatus };
+      setTasks(updatedTasks);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 p-4 sm:p-8">
-      <h1 className="text-2xl font-bold mb-4">Kanban Board</h1>
-      <div className="flex flex-col sm:flex-row gap-4">
-        {['backlog', 'doing', 'review', 'done'].map(status => (
-          <Column 
-            key={status} 
-            status={status} 
-            tasks={tasks[status]} 
-            onDrop={handleDrop} 
-            onDragOver={handleDragOver}
-            addTask={addTask}
-            startEditing={startEditing}
-            saveEdit={saveEdit}
-            editingTask={editingTask}
-          />
-        ))}
+    <div className="flex flex-col items-center p-4 space-y-4">
+      <div className="w-full max-w-3xl">
+        <Input 
+          value={newTask.title} 
+          onChange={e => setNewTask({...newTask, title: e.target.value})} 
+          placeholder="Task Title" 
+          className="mb-2"
+        />
+        <Textarea 
+          value={newTask.description} 
+          onChange={e => setNewTask({...newTask, description: e.target.value})} 
+          placeholder="Task Description"
+        />
+        <Button onClick={addTask}>Add Task</Button>
       </div>
+      <KanbanBoard tasks={tasks} onDragStart={handleDragStart} onDragEnter={handleDragEnter} onDrop={handleDrop} moveTask={moveTask} />
     </div>
   );
 }
 
-function Column({ status, tasks, onDrop, onDragOver, addTask, startEditing, saveEdit, editingTask }) {
-  const [newTaskTitle, setNewTaskTitle] = useState('');
-  const [newTaskDescription, setNewTaskDescription] = useState('');
+function KanbanBoard({ tasks, onDragStart, onDragEnter, onDrop, moveTask }) {
+  const columns = ['backlog', 'doing', 'review', 'done'];
 
   return (
-    <div 
-      onDrop={(e) => onDrop(e, status)} 
-      onDragOver={onDragOver}
-      className="flex-1 bg-white rounded-lg shadow p-4 min-h-[200px] flex flex-col"
-    >
-      <h2 className="text-lg font-semibold mb-2 capitalize">{status}</h2>
-      <div className="flex-grow overflow-y-auto">
-        {tasks.map(task => (
-          <TaskCard 
-            key={task.id} 
-            task={task} 
-            onDragStart={handleDragStart} 
-            startEditing={startEditing}
-            saveEdit={saveEdit}
-            isEditing={editingTask.id === task.id}
-            editingContent={editingTask.content}
-          />
-        ))}
-      </div>
-      {status === 'backlog' && (
-        <div className="mt-4">
-          <Input 
-            placeholder="Task Title" 
-            value={newTaskTitle} 
-            onChange={(e) => setNewTaskTitle(e.target.value)} 
-            className="mb-2"
-          />
-          <Input 
-            placeholder="Description" 
-            value={newTaskDescription} 
-            onChange={(e) => setNewTaskDescription(e.target.value)} 
-          />
-          <Button onClick={() => {addTask(newTaskTitle, newTaskDescription); setNewTaskTitle(''); setNewTaskDescription('');}} className="mt-2 w-full">
-            Add Task
-          </Button>
-        </div>
-      )}
+    <div className="flex flex-col sm:flex-row w-full max-w-5xl space-y-4 sm:space-y-0 sm:space-x-4">
+      {columns.map(status => (
+        <Column 
+          key={status} 
+          status={status} 
+          tasks={tasks.filter(t => t.status === status)} 
+          onDragStart={onDragStart} 
+          onDragEnter={onDragEnter} 
+          onDrop={onDrop}
+          moveTask={moveTask}
+        />
+      ))}
     </div>
   );
 }
 
-function TaskCard({ task, onDragStart, startEditing, saveEdit, isEditing, editingContent }) {
-  const [localContent, setLocalContent] = useState(task.description);
+function Column({ status, tasks, onDragStart, onDragEnter, onDrop, moveTask }) {
+  const colorClass = {
+    'backlog': 'bg-red-100',
+    'doing': 'bg-yellow-100',
+    'review': 'bg-green-100',
+    'done': 'bg-blue-100'
+  }[status];
 
   return (
-    <Card 
-      draggable 
-      onDragStart={(e) => onDragStart(e, task, task.status)} 
-      className="mb-2 cursor-move transition-transform duration-200 ease-in-out transform hover:scale-105"
-    >
+    <div className={`flex-1 p-4 rounded-lg ${colorClass}`} onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
+      <h2 className="text-lg font-semibold mb-2">{status.toUpperCase()}</h2>
+      {tasks.map((task, index) => (
+        <Task 
+          key={index} 
+          task={task} 
+          index={index} 
+          onDragStart={onDragStart} 
+          onDragEnter={onDragEnter}
+          moveTask={moveTask}
+        />
+      ))}
+    </div>
+  );
+}
+
+function Task({ task, index, onDragStart, onDragEnter, moveTask }) {
+  const [editing, setEditing] = useState(false);
+  const [editedDescription, setEditedDescription] = useState(task.description);
+  const [hasChanges, setHasChanges] = useState(false);
+
+  useEffect(() => {
+    setHasChanges(editedDescription !== task.description);
+  }, [editedDescription, task.description]);
+
+  return (
+    <Card className="mb-2 p-2 cursor-move" draggable onDragStart={(e) => onDragStart(e, index)} onDragEnter={(e) => onDragEnter(e, index)}>
       <CardHeader>
         <CardTitle>{task.title}</CardTitle>
       </CardHeader>
       <CardContent>
-        {isEditing ? (
-          <>
-            <Input 
-              value={editingContent} 
-              onChange={(e) => setLocalContent(e.target.value)} 
+        {editing ? (
+          <div>
+            <Textarea 
+              value={editedDescription} 
+              onChange={e => setEditedDescription(e.target.value)} 
               className="mb-2"
             />
-            <div className="flex gap-2">
-              <Button onClick={() => saveEdit(task.id)}>Save</Button>
-              <Button variant="destructive" onClick={() => startEditing({...task, description: task.description})}>Discard</Button>
-            </div>
-          </>
+            {hasChanges && (
+              <div className="flex space-x-2">
+                <Button onClick={() => {setEditing(false); setEditedDescription(task.description);}}>Discard</Button>
+                <Button onClick={() => {setEditing(false); /* Here you would typically save changes to state or server */ }}>Save</Button>
+              </div>
+            )}
+          </div>
         ) : (
-          <CardDescription onClick={() => startEditing(task)} className="cursor-pointer">
-            {localContent}
-          </CardDescription>
+          <CardDescription onClick={() => setEditing(true)}>{task.description}</CardDescription>
         )}
       </CardContent>
-      <CardFooter className={`text-${task.status === 'backlog' ? 'red' : task.status === 'doing' ? 'yellow' : task.status === 'review' ? 'green' : 'blue'}-500`}>
-        {task.status}
+      <CardFooter className="flex justify-between">
+        <Button variant="outline" onClick={() => moveTask(index, -1)} disabled={task.status === 'backlog'}>Previous</Button>
+        <Button variant="outline" onClick={() => moveTask(index, 1)} disabled={task.status === 'done'}>Next</Button>
       </CardFooter>
     </Card>
   );
 }
-
-export default App;

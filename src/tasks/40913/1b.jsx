@@ -1,150 +1,90 @@
-import React, { useState, useRef, useEffect } from 'react';
-//Card footer imported by trainer
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import React, { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
-const statuses = ['backlog', 'doing', 'review', 'done'];
+const initialTasks = [
+  { id: '1', title: 'Initial Task', description: 'This is a task in backlog', status: 'backlog' },
+];
 
-function App() {
-  const [tasks, setTasks] = useState([]);
-  const dragItem = useRef();
-  const dragOverItem = useRef();
-
-  const handleDragStart = (e, position) => {
-    dragItem.current = position;
-  };
-
-  const handleDragEnter = (e, position) => {
-    dragOverItem.current = position;
-  };
-
-  const handleDragEnd = () => {
-    const copyListItems = [...tasks];
-    const dragItemContent = copyListItems[dragItem.current];
-    copyListItems.splice(dragItem.current, 1);
-    copyListItems.splice(dragOverItem.current, 0, dragItemContent);
-    dragItem.current = null;
-    dragOverItem.current = null;
-    setTasks(copyListItems);
-  };
+function Task({ task, onUpdate, onMove }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedDescription, setEditedDescription] = useState(task.description);
 
   return (
-    <div className="flex flex-col items-center p-4 sm:p-8">
-      <TaskForm addTask={task => setTasks([...tasks, { ...task, status: 'backlog' }])} />
-      <KanbanBoard tasks={tasks} setTasks={setTasks} 
-                   onDragStart={handleDragStart} 
-                   onDragEnter={handleDragEnter} 
-                   onDragEnd={handleDragEnd} />
-    </div>
+    <Card className="mb-2 w-64 shadow-lg">
+      <CardHeader className={`bg-${task.status}-500 text-white`}>
+        <CardTitle>{task.title}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isEditing ? (
+          <textarea 
+            value={editedDescription} 
+            onChange={(e) => setEditedDescription(e.target.value)}
+            className="w-full h-24 p-2 border"
+          />
+        ) : (
+          <p>{editedDescription}</p>
+        )}
+        {isEditing ? (
+          <div className="flex justify-end">
+            <Button onClick={() => { setIsEditing(false); onUpdate(task.id, editedDescription); }}>Save</Button>
+            <Button onClick={() => { setIsEditing(false); setEditedDescription(task.description); }}>Discard</Button>
+          </div>
+        ) : (
+          <Button onClick={() => setIsEditing(true)}>Edit</Button>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
-function TaskForm({ addTask }) {
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-
-  const submitTask = (e) => {
-    e.preventDefault();
-    if (!title.trim()) return;
-    addTask({ title, description });
-    setTitle('');
-    setDescription('');
-  };
-
+function Column({ status, children, onDrop }) {
   return (
-    <form onSubmit={submitTask} className="mb-4 w-full max-w-lg">
-      <input 
-        value={title} 
-        onChange={(e) => setTitle(e.target.value)} 
-        placeholder="Task title" 
-        className="mb-2 w-full p-2 border rounded"
-      />
-      <textarea 
-        value={description} 
-        onChange={(e) => setDescription(e.target.value)} 
-        placeholder="Description" 
-        className="mb-2 w-full p-2 border rounded"
-      />
-      <Button type="submit">Add Task</Button>
-    </form>
-  );
-}
-
-function KanbanBoard({ tasks, setTasks, onDragStart, onDragEnter, onDragEnd }) {
-  return (
-    <div className="flex flex-col sm:flex-row w-full">
-      {statuses.map(status => (
-        <Column key={status} status={status} tasks={tasks.filter(t => t.status === status)} 
-                setTasks={setTasks} onDragStart={onDragStart} onDragEnter={onDragEnter} onDragEnd={onDragEnd} />
-      ))}
-    </div>
-  );
-}
-
-function Column({ status, tasks, setTasks, onDragStart, onDragEnter, onDragEnd }) {
-  const colorClass = {
-    'backlog': 'bg-red-200',
-    'doing': 'bg-yellow-200',
-    'review': 'bg-green-200',
-    'done': 'bg-blue-200'
-  };
-
-  return (
-    <div className={`flex-1 m-2 p-2 rounded ${colorClass[status]}`}>
-      <h2 className="text-center font-bold">{status.toUpperCase()}</h2>
-      <div className="min-h-[100px]">
-        {tasks.map((task, index) => (
-          <Task key={task.title} task={task} index={index} setTasks={setTasks} 
-                onDragStart={onDragStart} onDragEnter={onDragEnter} onDragEnd={onDragEnd} />
-        ))}
+    <div className="flex-1 p-2">
+      <h2 className="text-center mb-2 text-lg font-bold">{status}</h2>
+      <div onDrop={onDrop} onDragOver={(e) => e.preventDefault()} className="min-h-[300px] border-2 border-dashed p-2">
+        {children}
       </div>
     </div>
   );
 }
 
-function Task({ task, index, setTasks, onDragStart, onDragEnter, onDragEnd }) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editDescription, setEditDescription] = useState(task.description);
+export default function App() {
+  const [tasks, setTasks] = useState(initialTasks);
 
-  const saveEdit = () => {
-    setTasks(prevTasks => 
-      prevTasks.map((t, idx) => idx === index ? {...t, description: editDescription} : t)
-    );
-    setIsEditing(false);
+  const moveTask = (id, newStatus) => {
+    setTasks(tasks.map(t => 
+      t.id === id ? {...t, status: newStatus} : t
+    ));
+  };
+
+  const handleDragEnd = (result) => {
+    const { source, destination } = result;
+    if (!destination) return;
+    if (source.droppableId === destination.droppableId && source.index === destination.index) return;
+
+    const taskId = tasks[source.index].id;
+    moveTask(taskId, destination.droppableId);
   };
 
   return (
-    <div 
-      draggable
-      onDragStart={(e) => onDragStart(e, index)} 
-      onDragEnter={(e) => onDragEnter(e, index)}
-      onDragEnd={onDragEnd}
-      className="my-2 p-2 border rounded shadow-md transition-all duration-300 ease-in-out hover:shadow-lg"
-    >
-      <Card>
-        <CardHeader>
-          <CardTitle>{task.title}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isEditing ? (
-            <textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} className="w-full" />
-          ) : (
-            <p>{task.description}</p>
-          )}
-        </CardContent>
-        <CardFooter>
-          {!isEditing ? (
-            <Button onClick={() => setIsEditing(true)}>Edit</Button>
-          ) : (
-            <>
-              <Button onClick={saveEdit} disabled={task.description === editDescription}>Save</Button>
-              <Button onClick={() => { setIsEditing(false); setEditDescription(task.description); }}>Discard</Button>
-            </>
-          )}
-        </CardFooter>
-      </Card>
+    <div className="p-4">
+      <div className="flex flex-col sm:flex-row gap-4">
+        {['backlog', 'doing', 'review', 'done'].map(status => (
+          <Column key={status} status={status} onDrop={() => {}}>
+            {tasks.filter(t => t.status === status).map((task, index) => (
+              <div key={task.id} draggable 
+                onDragStart={(e) => e.dataTransfer.setData("text/plain", task.id)}
+                onDragEnd={handleDragEnd}
+                className="drag-item">
+                <Task task={task} onUpdate={(id, desc) => {
+                  setTasks(tasks.map(t => t.id === id ? {...t, description: desc} : t));
+                }} />
+              </div>
+            ))}
+          </Column>
+        ))}
+      </div>
     </div>
   );
 }
-
-export default App;
