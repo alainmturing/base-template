@@ -22,52 +22,52 @@ import { Progress } from '@/components/ui/progress';
 // Extracted Components
 
 const PieChart = ({ percentage, color }) => {
-  const radius = 50;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (percentage / 100) * circumference;
+    const radius = 50;
+    const circumference = 2 * Math.PI * radius;
+    const offset = circumference - ((percentage >= 100 ? 100 : percentage) / 100) * circumference;
 
-  return (
-    <svg width="120" height="120" className="mx-auto">
-      <circle
-        stroke="#e5e7eb"
-        fill="transparent"
-        strokeWidth="10"
-        r={radius}
-        cx="60"
-        cy="60"
-      />
-      <circle
-        stroke={color}
-        fill="transparent"
-        strokeWidth="10"
-        strokeLinecap="round"
-        r={radius}
-        cx="60"
-        cy="60"
-        style={{
-          strokeDasharray: circumference,
-          strokeDashoffset: offset,
-          transition: 'stroke-dashoffset 0.5s ease',
-        }}
-      />
-      <text
-        x="60"
-        y="65"
-        textAnchor="middle"
-        className="text-xl font-semibold fill-current text-gray-800"
-      >
-        {percentage}%
-      </text>
-    </svg>
-  );
-};
+    return (
+      <svg width="120" height="120" className="mx-auto">
+        <circle
+          stroke="#e5e7eb"
+          fill="transparent"
+          strokeWidth="10"
+          r={radius}
+          cx="60"
+          cy="60"
+        />
+        <circle
+          stroke={color}
+          fill="transparent"
+          strokeWidth="10"
+          strokeLinecap="round"
+          r={radius}
+          cx="60"
+          cy="60"
+          style={{
+            strokeDasharray: circumference,
+            strokeDashoffset: offset,
+            transition: 'stroke-dashoffset 0.5s ease',
+          }}
+        />
+        <text
+            x="60"
+            y="65"
+            textAnchor="middle"
+            className="text-xl font-semibold fill-current text-gray-800"
+        >
+            {percentage > 100 ? '>100' : percentage}%
+        </text>
+      </svg>
+    );
+  };
 
 const ProgressDisplay = ({ goal, logs }) => {
   const today = new Date().toDateString();
-  const log = logs.find((log) => log.date === today);
+  const log = logs.find((log) => log.date === today && log.unit === goal.unit);
   const value = log ? log.value : 0;
-  const goalValue = goal.value !== '' ? Number(goal.value) : 1; // Prevent division by zero
-  const percentage = Math.min(((value / goalValue) * 100).toFixed(2), 100);
+  const goalValue = goal.value !== '' ? Number(goal.value) : 1;
+  const percentage = ((value / goalValue) * 100).toFixed(2);
 
   return (
     <Card className="mb-4 bg-white shadow-lg">
@@ -79,7 +79,7 @@ const ProgressDisplay = ({ goal, logs }) => {
       </CardHeader>
       <CardContent className="flex flex-col items-center">
         <Progress
-          value={percentage}
+          value={Math.min(percentage, 100)}
           className="w-full mb-4 bg-gray-200"
           style={{ height: '10px' }}
         />
@@ -96,7 +96,7 @@ const GoalSetter = ({
 }) => {
   const handleGoalChange = (e) => {
     const value = e.target.value;
-    if (value === '' || /^[1-9]\d*$/.test(value)) {
+    if (/^\d*$/.test(value)) {
       setNewGoal({ ...newGoal, value });
     }
   };
@@ -111,29 +111,30 @@ const GoalSetter = ({
         <CardTitle className="text-lg text-green-600">Set Daily Goal</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4">
-          <Input
-            type="number"
-            value={newGoal.value}
-            onChange={handleGoalChange}
-            className="mb-2 sm:mb-0"
-            placeholder="Enter goal"
-            min="1"
-            aria-label="Daily goal input"
-          />
-          <Select value={newGoal.unit} onValueChange={handleUnitChange}>
-            <SelectTrigger className="w-36">
-              <SelectValue placeholder="Select Unit" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="pages">Pages</SelectItem>
-              <SelectItem value="minutes">Minutes</SelectItem>
-            </SelectContent>
-          </Select>
+        <div className="flex flex-col space-y-4">
+          <div className="flex flex-col sm:flex-row sm:space-x-4 space-y-4 sm:space-y-0">
+            <Input
+              type="text"
+              value={newGoal.value}
+              onChange={handleGoalChange}
+              className="flex-grow"
+              placeholder="Enter goal"
+              aria-label="Daily goal input"
+            />
+            <Select value={newGoal.unit} onValueChange={handleUnitChange}>
+              <SelectTrigger className="w-full sm:w-36">
+                <SelectValue placeholder="Select Unit" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pages">Pages</SelectItem>
+                <SelectItem value="minutes">Minutes</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <Button
             onClick={handleSaveGoal}
             disabled={newGoal.value === ''}
-            className="bg-green-500 hover:bg-green-600"
+            className="w-full sm:w-auto bg-green-500 hover:bg-green-600"
           >
             Save
           </Button>
@@ -149,13 +150,16 @@ const LogEntry = ({
   currentLog,
   setCurrentLog,
   handleSaveLog,
+  goal,
 }) => {
   const handleLogChange = (e) => {
     const value = e.target.value;
-    if (value === '' || /^[0-9]\d*$/.test(value)) {
+    if (/^\d*$/.test(value)) {
       setCurrentLog(value);
     }
   };
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
   return (
     <Card className="mb-4 bg-white shadow-lg">
@@ -171,22 +175,22 @@ const LogEntry = ({
               onSelect={(date) => {
                 if (date) setCurrentDate(date);
               }}
+              disabled={(date) => date > today}
               className="border rounded-md p-2"
             />
           </div>
           <Input
-            type="number"
+            type="text"
             value={currentLog}
             onChange={handleLogChange}
-            placeholder={`Pages / Minutes`}
+            placeholder={`${goal.unit}`}
             className="mb-2 sm:mb-0"
-            min="0"
             aria-label="Reading log input"
           />
           <Button
             onClick={handleSaveLog}
             disabled={currentLog === ''}
-            className="bg-blue-500 hover:bg-blue-600"
+            className="mt-2 sm:mt-0 bg-blue-500 hover:bg-blue-600"
           >
             Save
           </Button>
@@ -218,7 +222,7 @@ const History = ({ logs }) => {
               );
               return (
                 <li
-                  key={log.date}
+                  key={`${log.date}-${log.unit}`}
                   className="flex justify-between items-center bg-gray-100 p-2 rounded"
                 >
                   <span className="text-gray-700">{log.date}</span>
@@ -245,7 +249,6 @@ const History = ({ logs }) => {
   );
 };
 
-// Main App Component
 
 export default function App() {
   const [goal, setGoal] = useState({ value: '', unit: 'pages' });
@@ -263,11 +266,13 @@ export default function App() {
   const handleSaveLog = () => {
     if (currentLog === '') return;
     const dateStr = currentDate.toDateString();
-    const existingLog = logs.find((log) => log.date === dateStr);
+    const existingLog = logs.find((log) => log.date === dateStr && log.unit === goal.unit);
     if (existingLog) {
       setLogs(
         logs.map((log) =>
-          log.date === dateStr ? { ...log, value: Number(currentLog) } : log
+          log.date === dateStr && log.unit === goal.unit
+            ? { ...log, value: Number(currentLog), goalValue: goal.value }
+            : log
         )
       );
     } else {
@@ -308,6 +313,7 @@ export default function App() {
           currentLog={currentLog}
           setCurrentLog={setCurrentLog}
           handleSaveLog={handleSaveLog}
+          goal={goal}
         />
         <ProgressDisplay goal={goal} logs={logs} />
         <History logs={logs} />
