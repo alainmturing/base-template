@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Card,
   CardContent,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
@@ -24,12 +23,15 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Pencil, Trash2, Plus, Book, BookOpen, AlertCircle } from 'lucide-react';
+import { cn } from "@/lib/utils";
 
 export default function App() {
   const [books, setBooks] = useState([]);
   const [genres, setGenres] = useState([]);
   const [quotes, setQuotes] = useState([]);
-  const [viewMode, setViewMode] = useState('book'); // 'book' or 'genre'
   const [searchTerm, setSearchTerm] = useState('');
 
   // Form states
@@ -44,37 +46,56 @@ export default function App() {
   const [editingQuote, setEditingQuote] = useState(null);
   const [editingBook, setEditingBook] = useState(null);
   const [editingGenre, setEditingGenre] = useState(null);
+  const [quoteError, setQuoteError] = useState('');
 
-  // Handlers for Quotes
+  const [errors, setErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const validateForm = () => {
+    const newErrors = {};
+    if (!quoteText.trim()) newErrors.quote = "Please enter a quote.";
+    if (!selectedBook) newErrors.book = "Please select a book.";
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleAddQuote = () => {
-    if (!quoteText || !selectedBook) return;
-    const newQuote = {
-      id: Date.now(),
-      text: quoteText,
-      bookId: selectedBook,
-      genreId: selectedGenre || null,
-    };
-    setQuotes([...quotes, newQuote]);
-    setQuoteText('');
-    setSelectedBook('');
-    setSelectedGenre('');
-    setIsQuoteDialogOpen(false);
+    setIsSubmitting(true);
+    if (validateForm()) {
+      const newQuote = {
+        id: Date.now(),
+        text: quoteText,
+        bookId: selectedBook,
+        genreId: selectedGenre || null,
+      };
+      setQuotes([...quotes, newQuote]);
+      setQuoteText('');
+      setSelectedBook('');
+      setSelectedGenre('');
+      setErrors({});
+      setIsQuoteDialogOpen(false);
+    }
+    setIsSubmitting(false);
   };
 
   const handleEditQuote = () => {
-    if (!quoteText || !selectedBook) return;
-    setQuotes(
-      quotes.map((quote) =>
-        quote.id === editingQuote.id
-          ? { ...quote, text: quoteText, bookId: selectedBook, genreId: selectedGenre || null }
-          : quote
-      )
-    );
-    setEditingQuote(null);
-    setQuoteText('');
-    setSelectedBook('');
-    setSelectedGenre('');
-    setIsQuoteDialogOpen(false);
+    setIsSubmitting(true);
+    if (validateForm()) {
+      setQuotes(
+        quotes.map((quote) =>
+          quote.id === editingQuote.id
+            ? { ...quote, text: quoteText, bookId: selectedBook, genreId: selectedGenre || null }
+            : quote
+        )
+      );
+      setEditingQuote(null);
+      setQuoteText('');
+      setSelectedBook('');
+      setSelectedGenre('');
+      setErrors({});
+      setIsQuoteDialogOpen(false);
+    }
+    setIsSubmitting(false);
   };
 
   const handleDeleteQuote = (id) => {
@@ -114,13 +135,6 @@ export default function App() {
     setIsBookDialogOpen(false);
   };
 
-  const handleDeleteBook = (id) => {
-    if (window.confirm('Deleting this book will remove all associated quotes. Proceed?')) {
-      setBooks(books.filter((book) => book.id !== id));
-      setQuotes(quotes.filter((quote) => quote.bookId !== id));
-    }
-  };
-
   // Handlers for Genres
   const handleAddGenre = () => {
     if (!newGenreName) return;
@@ -152,221 +166,268 @@ export default function App() {
     setIsGenreDialogOpen(false);
   };
 
-  const handleDeleteGenre = (id) => {
-    if (window.confirm('Deleting this genre will remove it from all associated quotes. Proceed?')) {
-      setGenres(genres.filter((genre) => genre.id !== id));
-      setQuotes(
-        quotes.map((quote) =>
-          quote.genreId === id ? { ...quote, genreId: null } : quote
-        )
-      );
-    }
-  };
-
   // Search functionality
   const filteredQuotes = quotes.filter((quote) =>
     quote.text.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Get quotes organized by viewMode
-  const organizedQuotes =
-    viewMode === 'book'
-      ? books.map((book) => ({
-          ...book,
-          quotes: filteredQuotes.filter((quote) => quote.bookId === book.id),
-        }))
-      : genres.map((genre) => ({
-          ...genre,
-          quotes: filteredQuotes.filter((quote) => quote.genreId === genre.id),
-        }));
+  // Get quotes organized by book and genre
+  const quotesByBook = books.map((book) => ({
+    ...book,
+    quotes: filteredQuotes.filter((quote) => quote.bookId === book.id),
+  }));
 
-  // Responsive classes
-  const containerClass = 'p-4 max-w-4xl mx-auto';
-  const headerClass = 'flex flex-col sm:flex-row justify-between items-center mb-4';
-  const buttonClass = 'mt-2 sm:mt-0 ml-0 sm:ml-2';
+  const quotesByGenre = genres.map((genre) => ({
+    ...genre,
+    quotes: filteredQuotes.filter((quote) => quote.genreId === genre.id),
+  }));
 
   return (
-    <div className={containerClass}>
-      <div className={headerClass}>
-        <h1 className="text-3xl font-extrabold text-indigo-600 mb-4">Book Quote Collector</h1>
-        <div className="flex flex-col sm:flex-row items-start sm:items-center">
+    <div className="p-4 max-w-6xl mx-auto">
+      <div className="flex flex-col sm:flex-row justify-between items-center mb-4">
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-indigo-600 mb-4">Book Quote Collector</h1>
+        <div className="w-full sm:w-auto flex flex-col sm:flex-row items-center gap-2">
           <Input
             placeholder="Search quotes..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="mb-2 sm:mb-0 sm:mr-2 border border-indigo-300"
+            className="w-full sm:w-auto border border-indigo-300"
           />
-          <Select value={viewMode} onValueChange={setViewMode} className="w-36 mb-2 sm:mb-0 sm:mr-2">
-            <SelectTrigger>
-              <SelectValue placeholder="View By" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="book">Book</SelectItem>
-              <SelectItem value="genre">Genre</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button onClick={() => { setIsQuoteDialogOpen(true); setEditingQuote(null); }} className={`${buttonClass} bg-green-500 text-white`}>
-            Add Quote
-          </Button>
-          <Button onClick={() => { setIsBookDialogOpen(true); setEditingBook(null); }} className={`${buttonClass} bg-blue-500 text-white`}>
-            Add Book
-          </Button>
-          <Button onClick={() => { setIsGenreDialogOpen(true); setEditingGenre(null); }} className={`${buttonClass} bg-yellow-500 text-black`}>
-            Add Genre
-          </Button>
         </div>
       </div>
-
-      {/* Organized Quotes */}
-      <div>
-        {organizedQuotes.map((group) => (
-          <Card key={group.id} className="mb-6 border-2 border-gray-300 shadow-md rounded-lg">
-            <CardHeader>
-              <CardTitle className="text-lg text-indigo-700 font-semibold">
-                {viewMode === 'book' ? group.title : group.name}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {group.quotes.length > 0 ? (
-                group.quotes.map((quote) => (
-                  <Card key={quote.id} className="mb-2 border-2 border-indigo-300 rounded">
-                    <CardContent>
-                      <p className="text-xl italic font-semibold text-purple-800">"{quote.text}"</p>
-                      <p className="text-sm text-gray-600">
-                        {viewMode === 'genre' && quote.bookId
-                          ? `Book: ${books.find((b) => b.id === quote.bookId)?.title}`
-                          : viewMode === 'book' && quote.genreId
-                          ? `Genre: ${genres.find((g) => g.id === quote.genreId)?.name}`
-                          : ''}
-                      </p>
-                    </CardContent>
-                    <CardFooter>
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          setEditingQuote(quote);
-                          setQuoteText(quote.text);
-                          setSelectedBook(quote.bookId);
-                          setSelectedGenre(quote.genreId);
-                          setIsQuoteDialogOpen(true);
-                        }}
-                        className="mr-2 bg-indigo-500 text-white"
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => handleDeleteQuote(quote.id)}
-                        className="bg-red-500 text-white"
-                      >
-                        Delete
-                      </Button>
-                    </CardFooter>
-                  </Card>
-                ))
-              ) : (
-                <p className="text-gray-500">No quotes available.</p>
-              )}
-            </CardContent>
-          </Card>
-        ))}
+      
+      <div className="flex flex-wrap justify-center sm:justify-start gap-2 mt-2 sm:mt-0 mb-4">
+        <Button onClick={() => { setIsQuoteDialogOpen(true); setEditingQuote(null); }} className="bg-green-500 text-white">
+          <Plus className="w-4 h-4 mr-2" /> Add Quote
+        </Button>
+        <Button onClick={() => { setIsBookDialogOpen(true); setEditingBook(null); }} className="bg-blue-500 text-white">
+          <Plus className="w-4 h-4 mr-2" /> Add Book
+        </Button>
+        <Button onClick={() => { setIsGenreDialogOpen(true); setEditingGenre(null); }} className="bg-yellow-500 text-black">
+          <Plus className="w-4 h-4 mr-2" /> Add Genre
+        </Button>
       </div>
+
+      <Tabs defaultValue="books" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="books" className="flex items-center"><Book className="w-4 h-4 mr-2" /> Books</TabsTrigger>
+          <TabsTrigger value="genres" className="flex items-center"><BookOpen className="w-4 h-4 mr-2" /> Genres</TabsTrigger>
+        </TabsList>
+        <TabsContent value="books">
+        <ScrollArea className="h-[calc(100vh-250px)] pr-4">
+            {quotesByBook.map((book) => (
+                <Card key={book.id} className="mb-4 border border-gray-300 shadow-sm rounded-lg overflow-visible">
+                <CardHeader className="bg-gray-50 py-2">
+                    <CardTitle className="text-lg text-indigo-700 font-semibold">{book.title}</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0 overflow-visible">
+                    {book.quotes.length > 0 ? (
+                    <ul className="divide-y divide-gray-200">
+                        {book.quotes.map((quote) => (
+                        <li key={quote.id} className="p-3 hover:bg-gray-50 transition-colors duration-150 ease-in-out">
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 w-full">
+                            <div className="flex-grow w-full">
+                                <p className="text-sm italic font-medium text-gray-900 break-words whitespace-normal w-full"
+                                style={{ wordWrap: "break-word", overflowWrap: "break-word", wordBreak: "break-all" }}>
+                                "{quote.text}"
+                                </p>
+                                {quote.genreId && (
+                                <p className="text-xs text-gray-600 mt-1">
+                                    Genre: {genres.find((g) => g.id === quote.genreId)?.name}
+                                </p>
+                                )}
+                            </div>
+                            <div className="flex flex-shrink-0 gap-1 mt-2 sm:mt-0">
+                                <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                    setEditingQuote(quote);
+                                    setQuoteText(quote.text);
+                                    setSelectedBook(quote.bookId);
+                                    setSelectedGenre(quote.genreId);
+                                    setIsQuoteDialogOpen(true);
+                                }}
+                                className="text-indigo-600 hover:text-indigo-900 p-1"
+                                >
+                                <Pencil className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleDeleteQuote(quote.id)}
+                                className="text-red-600 hover:text-red-900 p-1"
+                                >
+                                <Trash2 className="w-4 h-4" />
+                                </Button>
+                            </div>
+                            </div>
+                        </li>
+                        ))}
+                    </ul>
+                    ) : (
+                    <p className="text-gray-500 p-3">No quotes available.</p>
+                    )}
+                </CardContent>
+                </Card>
+            ))}
+            </ScrollArea>
+
+        </TabsContent>
+        <TabsContent value="genres">
+        <ScrollArea className="overflow-auto pr-4">
+            {quotesByGenre.map((genre) => (
+                <Card key={genre.id} className="mb-4 border border-gray-300 shadow-sm rounded-lg overflow-visible">
+                <CardHeader className="bg-gray-50 py-2">
+                    <CardTitle className="text-lg text-indigo-700 font-semibold">{genre.name}</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0 overflow-visible">
+                    {genre.quotes.length > 0 ? (
+                    <ul className="divide-y divide-gray-200">
+                        {genre.quotes.map((quote) => (
+                        <li key={quote.id} className="p-3 hover:bg-gray-50 transition-colors duration-150 ease-in-out">
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 w-full">
+                            <div className="flex-grow w-full">
+                                <p className="text-sm italic font-medium text-gray-900 break-words whitespace-normal w-full"
+                                style={{ wordWrap: "break-word", overflowWrap: "break-word", wordBreak: "break-all" }}>
+                                "{quote.text}"
+                                </p>
+                                <p className="text-xs text-gray-600 mt-1">
+                                Book: {books.find((b) => b.id === quote.bookId)?.title}
+                                </p>
+                            </div>
+                            <div className="flex flex-shrink-0 gap-1 mt-2 sm:mt-0">
+                                <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                    setEditingQuote(quote);
+                                    setQuoteText(quote.text);
+                                    setSelectedBook(quote.bookId);
+                                    setSelectedGenre(quote.genreId);
+                                    setIsQuoteDialogOpen(true);
+                                }}
+                                className="text-indigo-600 hover:text-indigo-900 p-1"
+                                >
+                                <Pencil className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleDeleteQuote(quote.id)}
+                                className="text-red-600 hover:text-red-900 p-1"
+                                >
+                                <Trash2 className="w-4 h-4" />
+                                </Button>
+                            </div>
+                            </div>
+                        </li>
+                        ))}
+                    </ul>
+                    ) : (
+                    <p className="text-gray-500 p-3">No quotes available.</p>
+                    )}
+                </CardContent>
+                </Card>
+            ))}
+            </ScrollArea>
+        </TabsContent>
+      </Tabs>
 
       {/* Quote Dialog */}
       <Dialog open={isQuoteDialogOpen} onOpenChange={setIsQuoteDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle className="text-xl font-semibold">
-              {editingQuote ? 'Edit Quote' : 'Add Quote'}
-            </DialogTitle>
+            <DialogTitle>{editingQuote ? 'Edit Quote' : 'Add Quote'}</DialogTitle>
             <DialogDescription>
               {editingQuote ? 'Update the details of the quote.' : 'Add a new quote to your collection.'}
             </DialogDescription>
           </DialogHeader>
-          <div className="mt-4">
-            <Textarea
-              placeholder="Enter quote..."
-              value={quoteText}
-              onChange={(e) => setQuoteText(e.target.value)}
-              className="mb-4 border border-indigo-300"
-            />
-            <Select
-              value={selectedBook}
-              onValueChange={setSelectedBook}
-              className="mb-4"
-            >
+          <div className="grid gap-4 py-4">
+            <div>
+              <Textarea
+                placeholder="Enter quote..."
+                value={quoteText}
+                onChange={(e) => {
+                  setQuoteText(e.target.value);
+                  setErrors((prev) => ({ ...prev, quote: '' }));
+                }}
+                className={cn(
+                  "col-span-3",
+                  errors.quote && "border-red-500 focus-visible:ring-red-500"
+                )}
+              />
+              {errors.quote && (
+                <p className="text-sm text-red-500 mt-1 flex items-center">
+                  <AlertCircle className="w-4 h-4 mr-1" />
+                  {errors.quote}
+                </p>
+              )}
+            </div>
+            <div>
+              <Select
+                value={selectedBook}
+                onValueChange={(value) => {
+                  setSelectedBook(value);
+                  setErrors((prev) => ({ ...prev, book: '' }));
+                }}
+              >
+                <SelectTrigger className={cn(errors.book && "border-red-500 focus-visible:ring-red-500")}>
+                  <SelectValue placeholder="Select Book" />
+                </SelectTrigger>
+                <SelectContent>
+                  {books.map((book) => (
+                    <SelectItem key={book.id} value={book.id}>{book.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.book && (
+                <p className="text-sm text-red-500 mt-1 flex items-center">
+                  <AlertCircle className="w-4 h-4 mr-1" />
+                  {errors.book}
+                </p>
+              )}
+            </div>
+            <Select value={selectedGenre} onValueChange={setSelectedGenre}>
               <SelectTrigger>
-                <SelectValue placeholder="Select Book" />
-              </SelectTrigger>
-              <SelectContent>
-                {books.map((book) => (
-                  <SelectItem key={book.id} value={book.id}>
-                    {book.title}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button
-              variant="link"
-              onClick={() => setIsBookDialogOpen(true)}
-              className="mb-4 text-indigo-500"
-            >
-              Add New Book
-            </Button>
-            <Select
-              value={selectedGenre}
-              onValueChange={setSelectedGenre}
-              className="mb-4"
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select Genre (Optional)" />
+                <SelectValue placeholder="Select Genre" />
               </SelectTrigger>
               <SelectContent>
                 {genres.map((genre) => (
-                  <SelectItem key={genre.id} value={genre.id}>
-                    {genre.name}
-                  </SelectItem>
+                  <SelectItem key={genre.id} value={genre.id}>{genre.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <Button
-              variant="link"
-              onClick={() => setIsGenreDialogOpen(true)}
-              className="mb-4 text-indigo-500"
-            >
-              Add New Genre
-            </Button>
           </div>
           <DialogFooter>
-            <Button onClick={editingQuote ? handleEditQuote : handleAddQuote} className="bg-green-500 text-white">
-              {editingQuote ? 'Update Quote' : 'Add Quote'}
+            <Button
+              onClick={editingQuote ? handleEditQuote : handleAddQuote}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Saving...' : (editingQuote ? 'Update Quote' : 'Add Quote')}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
+      
       {/* Book Dialog */}
       <Dialog open={isBookDialogOpen} onOpenChange={setIsBookDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle className="text-xl font-semibold">
-              {editingBook ? 'Edit Book' : 'Add Book'}
-            </DialogTitle>
+            <DialogTitle>{editingBook ? 'Edit Book' : 'Add Book'}</DialogTitle>
             <DialogDescription>
               {editingBook ? 'Update the title of the book.' : 'Add a new book to your collection.'}
             </DialogDescription>
           </DialogHeader>
-          <div className="mt-4">
+          <div className="grid gap-4 py-4">
             <Input
               placeholder="Book Title"
               value={newBookTitle}
               onChange={(e) => setNewBookTitle(e.target.value)}
-              className="mb-4 border border-blue-300"
             />
           </div>
           <DialogFooter>
-            <Button onClick={editingBook ? handleEditBook : handleAddBook} className="bg-blue-500 text-white">
+            <Button onClick={editingBook ? handleEditBook : handleAddBook}>
               {editingBook ? 'Update Book' : 'Add Book'}
             </Button>
           </DialogFooter>
@@ -375,25 +436,22 @@ export default function App() {
 
       {/* Genre Dialog */}
       <Dialog open={isGenreDialogOpen} onOpenChange={setIsGenreDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle className="text-xl font-semibold">
-              {editingGenre ? 'Edit Genre' : 'Add Genre'}
-            </DialogTitle>
+            <DialogTitle>{editingGenre ? 'Edit Genre' : 'Add Genre'}</DialogTitle>
             <DialogDescription>
               {editingGenre ? 'Update the name of the genre.' : 'Add a new genre to your collection.'}
             </DialogDescription>
           </DialogHeader>
-          <div className="mt-4">
+          <div className="grid gap-4 py-4">
             <Input
               placeholder="Genre Name"
               value={newGenreName}
               onChange={(e) => setNewGenreName(e.target.value)}
-              className="mb-4 border border-yellow-300"
             />
           </div>
           <DialogFooter>
-            <Button onClick={editingGenre ? handleEditGenre : handleAddGenre} className="bg-yellow-500 text-black">
+            <Button onClick={editingGenre ? handleEditGenre : handleAddGenre}>
               {editingGenre ? 'Update Genre' : 'Add Genre'}
             </Button>
           </DialogFooter>
