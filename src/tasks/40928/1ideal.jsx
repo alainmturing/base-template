@@ -24,8 +24,16 @@ function App() {
   const [generatedPalette, setGeneratedPalette] = useState([]);
   const [copiedColor, setCopiedColor] = useState(null);
 
+  const isValidHexColor = (color) => {
+    return /^#[0-9A-Fa-f]{6}$/.test(color);
+  };
+
   useEffect(() => {
-    generatePalette();
+    if (isValidHexColor(baseColor)) {
+      generatePalette();
+    } else {
+      setGeneratedPalette([]);
+    }
   }, [baseColor, harmonyRule, hue, saturation, brightness]);
 
   useEffect(() => {
@@ -199,10 +207,6 @@ function App() {
     return `#${r}${g}${b}`;
   };
 
-  const handleColorInputChange = (e) => {
-    setBaseColor(e.target.value);
-  };
-
   const copyToClipboard = (color) => {
     navigator.clipboard.writeText(color).then(() => {
       setCopiedColor(color);
@@ -225,16 +229,16 @@ function App() {
             <div className="flex-1 flex items-center space-x-2">
               <input
                 type="color"
-                value={baseColor}
+                value={isValidHexColor(baseColor) ? baseColor : '#000000'}
                 onChange={(e) => setBaseColor(e.target.value)}
                 className="w-16 h-10 rounded cursor-pointer"
               />
               <Input
                 type="text"
                 value={baseColor}
-                onChange={handleColorInputChange}
+                onChange={(e) => setBaseColor(e.target.value)}
                 placeholder="#3490dc"
-                className="flex-1"
+                className={`flex-1 ${isValidHexColor(baseColor) ? '' : 'border-red-500'}`}
               />
             </div>
           </div>
@@ -305,23 +309,29 @@ function App() {
           {/* Generated Palette */}
           <div>
             <label className="block mb-2 font-medium text-gray-700">Generated Palette:</label>
-            <div className="flex flex-wrap gap-4">
-              {generatedPalette.map((color, index) => (
-                <div
-                  key={index}
-                  className="w-24 h-24 rounded-lg shadow-md flex flex-col justify-end items-center p-2 transition-transform hover:scale-105 cursor-pointer relative"
-                  style={{ backgroundColor: color }}
-                  onClick={() => copyToClipboard(color)}
-                >
-                  <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 text-white text-sm rounded-lg opacity-0 hover:opacity-100 transition-opacity">
-                    {copiedColor === color ? 'Copied!' : 'Click to copy'}
-                  </div>
-                  <span className="text-white text-xs bg-black bg-opacity-50 rounded px-1 py-0.5">
-                    {color.toUpperCase()}
-                  </span>
+            {isValidHexColor(baseColor) ? (
+              <div className="overflow-x-auto">
+                <div className="flex space-x-4 pb-4" style={{ minWidth: 'max-content' }}>
+                  {generatedPalette.map((color, index) => (
+                    <div
+                      key={index}
+                      className="w-24 h-24 rounded-lg shadow-md flex flex-col justify-end items-center p-2 transition-transform hover:scale-105 cursor-pointer relative flex-shrink-0"
+                      style={{ backgroundColor: color }}
+                      onClick={() => copyToClipboard(color)}
+                    >
+                      <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 text-white text-sm rounded-lg opacity-0 hover:opacity-100 transition-opacity">
+                        {copiedColor === color ? 'Copied!' : 'Click to copy'}
+                      </div>
+                      <span className="text-white text-xs bg-black bg-opacity-50 rounded px-1 py-0.5">
+                        {color.toUpperCase()}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            ) : (
+              <p className="text-red-500">Please enter a valid hex color (e.g., #RRGGBB)</p>
+            )}
           </div>
         </CardContent>
       </Card>
