@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Card,
   CardContent,
@@ -27,22 +27,24 @@ import {
 } from '@/components/ui/popover';
 
 const CustomCheckbox = ({ checked, onChange, label, color }) => (
-  <label className="flex items-center space-x-2 cursor-pointer">
-    <input
-      type="checkbox"
-      checked={checked}
-      onChange={onChange}
-      className="hidden"
-    />
-    <div 
-      className={`w-5 h-5 border-2 rounded flex items-center justify-center ${
-        checked ? 'bg-opacity-100' : 'bg-opacity-0'
-      }`}
-      style={{ backgroundColor: checked ? color : 'transparent', borderColor: color }}
-    >
-      {checked && <span className="text-white text-xs">✓</span>}
+  <label className="flex items-start space-x-2 cursor-pointer">
+    <div className="flex-shrink-0 mt-1">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        className="hidden"
+      />
+      <div 
+        className={`w-5 h-5 border-2 rounded flex items-center justify-center ${
+          checked ? 'bg-opacity-100' : 'bg-opacity-0'
+        }`}
+        style={{ backgroundColor: checked ? color : 'transparent', borderColor: color }}
+      >
+        {checked && <span className="text-white text-xs">✓</span>}
+      </div>
     </div>
-    <span>{label}</span>
+    {label && <span className="text-sm break-words">{label}</span>}
   </label>
 );
 
@@ -53,11 +55,31 @@ const App = () => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [currentHabit, setCurrentHabit] = useState(null);
   const [newHabit, setNewHabit] = useState({ name: '', color: '#a855f7' });
+  const containerRef = useRef(null);
+  const [wheelSize, setWheelSize] = useState(400);
+
+
+  
 
   const currentDate = new Date();
   const currentMonth = currentDate.getMonth();
   const currentYear = currentDate.getFullYear();
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+  
+  useEffect(() => {
+    const updateWheelSize = () => {
+      if (containerRef.current) {
+        const containerWidth = containerRef.current.offsetWidth;
+        const newSize = Math.min(containerWidth, 400);
+        setWheelSize(newSize);
+      }
+    };
+
+    updateWheelSize();
+    window.addEventListener('resize', updateWheelSize);
+    return () => window.removeEventListener('resize', updateWheelSize);
+  }, []);
 
   useEffect(() => {
     setTrackingData((prevData) => {
@@ -134,12 +156,12 @@ const App = () => {
   };
 
   const renderWheel = () => {
-    const baseRadius = 150;
-    const center = 200;
+    const baseRadius = wheelSize / 2 - 50;
+    const center = wheelSize / 2;
     const segmentAngle = 360 / daysInMonth;
   
     return (
-      <svg width={400} height={400} className="mx-auto">
+      <svg width={wheelSize} height={wheelSize} className="mx-auto">
         {Array.from({ length: daysInMonth }).map((_, dayIndex) => {
           const dayNumber = dayIndex + 1;
           const startAngle = segmentAngle * dayIndex - 90;
@@ -193,17 +215,18 @@ const App = () => {
               <PopoverTrigger asChild>
                 <g>{slices}</g>
               </PopoverTrigger>
-              <PopoverContent>
+              <PopoverContent className="w-64">
                 <div className="p-2">
                   <h3 className="font-semibold mb-2">Day {dayNumber}</h3>
                   {habits.map((habit) => (
-                    <div key={habit.id} className="mb-1">
+                    <div key={habit.id} className="mb-1 flex items-start">
                       <CustomCheckbox
                         checked={dayHabits[habit.id] || false}
                         onChange={() => toggleHabit(dayNumber, habit.id)}
-                        label={habit.name}
+                        label=""
                         color={habit.color}
                       />
+                      <span className="ml-2 text-sm break-words">{habit.name}</span>
                     </div>
                   ))}
                 </div>
@@ -225,7 +248,7 @@ const App = () => {
               y={y}
               textAnchor="middle"
               dominantBaseline="middle"
-              fontSize="12"
+              fontSize={wheelSize < 300 ? "8" : "12"}
               fill="#6b7280"
             >
               {dayNumber}
@@ -237,14 +260,16 @@ const App = () => {
   };
 
   const renderLegend = () => (
-    <div className="mt-6 flex flex-wrap justify-center space-x-4">
+    <div className="mt-6 flex flex-wrap justify-center gap-4">
       {habits.map((habit) => (
-        <div key={habit.id} className="flex items-center space-x-2">
+        <div key={habit.id} className="flex items-center max-w-full">
           <span
-            className="w-4 h-4 rounded-full"
+            className="w-4 h-4 rounded-full flex-shrink-0 mr-2"
             style={{ backgroundColor: habit.color }}
           ></span>
-          <span>{habit.name}</span>
+          <span className="text-sm truncate" title={habit.name}>
+            {habit.name}
+          </span>
         </div>
       ))}
     </div>
@@ -261,7 +286,7 @@ const App = () => {
         </CardHeader>
         <CardContent>
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6">
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2 mb-4 sm:mb-0">
               <Button onClick={() => setIsDialogOpen(true)} className="flex items-center">
                 <span className="mr-2">➕</span> Add Habit
               </Button>
@@ -271,44 +296,50 @@ const App = () => {
           {habits.length === 0 ? (
             <div className="text-center text-gray-500">No habits added yet.</div>
           ) : (
-            <div className="overflow-x-auto">
-              {renderWheel()}
-              {renderLegend()}
-              <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="flex flex-col items-center">
+              <div className="w-full max-w-md" ref={containerRef}>
+                {renderWheel()}
+              </div>
+              <div className="mt-6 w-full">
+                {renderLegend()}
+              </div>
+              <div className="mt-6 w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {habits.map((habit) => (
-                  <Card key={habit.id} className="flex items-center p-4">
-                    <span
-                      className="w-4 h-4 rounded-full mr-3"
-                      style={{ backgroundColor: habit.color }}
-                    ></span>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium">{habit.name}</span>
-                        <div className="flex space-x-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => {
-                              setCurrentHabit(habit);
-                              setNewHabit({ name: habit.name, color: habit.color });
-                              setIsEditDialogOpen(true);
-                            }}
-                            aria-label={`Edit ${habit.name}`}
-                          >
-                            ✏️
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeHabit(habit.id)}
-                            aria-label={`Remove ${habit.name}`}
-                          >
-                            🗑️
-                          </Button>
+                  <Card key={habit.id} className="p-4">
+                    <div className="flex items-center">
+                      <span
+                        className="flex-shrink-0 w-4 h-4 rounded-full mr-3"
+                        style={{ backgroundColor: habit.color }}
+                      ></span>
+                      <div className="flex-grow min-w-0">
+                        <div className="flex flex-wrap items-center justify-between">
+                          <span className="font-medium truncate mr-2">{habit.name}</span>
+                          <div className="flex space-x-2 flex-shrink-0">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                setCurrentHabit(habit);
+                                setNewHabit({ name: habit.name, color: habit.color });
+                                setIsEditDialogOpen(true);
+                              }}
+                              aria-label={`Edit ${habit.name}`}
+                            >
+                              ✏️
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeHabit(habit.id)}
+                              aria-label={`Remove ${habit.name}`}
+                            >
+                              🗑️
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        Streak: {calculateStreak(habit.id)} day(s)
+                        <div className="text-sm text-gray-500">
+                          Streak: {calculateStreak(habit.id)} day(s)
+                        </div>
                       </div>
                     </div>
                   </Card>
